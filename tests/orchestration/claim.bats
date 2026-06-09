@@ -62,6 +62,17 @@ setup() {
   [ "$output" != "13" ]
 }
 
+@test "duplicate identical claim comments (retry) dedup to one → claim proceeds" {
+  queue_response '[{"number":16,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  # same token posted twice (e.g. a network retry); unique collapses to 1 distinct token
+  # ⇒ no false race ⇒ we proceed as the sole claimant.
+  queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"},{"id":2,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "16" ]
+}
+
 @test "bot not among assignees → exit 2" {
   queue_response '[{"number":14,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
