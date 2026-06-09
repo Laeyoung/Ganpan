@@ -1,0 +1,14 @@
+{
+  "loop": "dev-review-loop",
+  "scope": { "branch": "feat/github-orchestration-v1", "base": "main" },
+  "started_at_epoch": 1780990832,
+  "started_at_iso": "2026-06-09T07:40:32Z",
+  "last_iteration_at_epoch": 1780993229,
+  "iteration": 7,
+  "counter": 2,
+  "threshold": 92,
+  "dimensions": ["correctness", "security", "error-handling", "test-coverage"],
+  "fixed_running_total": { "critical": 4, "major": 18, "minor": 2 },
+  "agent_failures_last_iter": [],
+  "status": "completed-clean"
+}
