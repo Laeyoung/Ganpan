@@ -1,0 +1,14 @@
+{
+  "loop": "document-review-loop",
+  "scope": { "target": "/Users/laeyoung/Documents/personal/ganpan/docs/superpowers/specs/2026-06-09-github-orchestration-spec-design.md", "reference": "/Users/laeyoung/Documents/personal/ganpan/PRD-github-claude-code-orchestration.md" },
+  "started_at_epoch": 1780973093,
+  "started_at_iso": "2026-06-09T02:44:53Z",
+  "last_iteration_at_epoch": 1780974206,
+  "iteration": 5,
+  "counter": 2,
+  "threshold": 92,
+  "dimensions": ["spec-parity-vs-PRD", "implementation-feasibility", "concurrency-and-security-design", "completeness-and-actionability"],
+  "fixed_running_total": { "critical": 11, "major": 9, "minor": 1 },
+  "agent_failures_last_iter": [],
+  "status": "completed-clean"
+}
