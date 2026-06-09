@@ -46,6 +46,20 @@ cfg() { printf '%s' "$1" > "$ORCH_CONFIG"; }
   [ "$output" = "pytest" ]
 }
 
+@test "auto-detect pytest from pytest.ini" {
+  cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
+  printf '[pytest]\n' > "$WORK/pytest.ini"
+  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  [ "$output" = "pytest" ]
+}
+
+@test "auto-detect pytest from tox.ini" {
+  cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
+  printf '[tox]\n' > "$WORK/tox.ini"
+  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  [ "$output" = "pytest" ]
+}
+
 @test "build and lint kinds auto-detect their Makefile targets" {
   cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
   printf 'build:\n\techo b\nlint:\n\techo l\n' > "$WORK/Makefile"
