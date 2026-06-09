@@ -15,6 +15,12 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "issue list API failure → clean exit 1" {
+  export GH_FAIL_MATCH='issue list'   # the candidate query itself fails
+  run bash "$SCRIPT"
+  [ "$status" -eq 1 ]
+}
+
 @test "multiple candidates → picks one of the top-N and claims it" {
   # candidateN=3 (setup); all three are within the top-3 by createdAt, so the random pick
   # must yield one of them — exercises the sort_by/slice/RANDOM-pick path (single-candidate
