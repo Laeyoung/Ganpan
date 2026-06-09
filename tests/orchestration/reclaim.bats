@@ -44,6 +44,7 @@ setup() {
   [ "$status" -eq 0 ]
   grep -q 'issue edit 6 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
   grep -q 'issue edit 6 --remove-assignee botx' "$GH_CALLS"
+  grep -q 'issue comment 6 --body reclaimed: orphan lock' "$GH_CALLS"  # notification posted
 }
 
 @test "unparseable claim timestamp → skipped (no spurious reclaim)" {

@@ -37,8 +37,11 @@ while read -r issue; do
   [ "$tepoch" -eq 0 ] && { log WARN "#$issue unparseable claim timestamp, skip"; continue; }
   [ $(( now - tepoch )) -le "$timeout_secs" ] && continue   # still alive
 
-  # timed out: check for open PR on branch issue-<n>
-  prs=$(gh pr list --head "issue-$issue" --state open --json number --repo "$REPO" || echo '[]')
+  # timed out: check for open PR on branch issue-<n>. On a transient API failure, SKIP
+  # rather than assume no PR — assuming none could reset an issue that actually has an
+  # open PR (losing the human-review routing). Next sweep retries.
+  prs=$(gh pr list --head "issue-$issue" --state open --json number --repo "$REPO") \
+    || { log WARN "#$issue pr-list failed, skip"; continue; }
   # Each branch is guarded so one issue's API failure logs and skips to the next issue
   # rather than aborting the whole sweep (we run in the main shell, so set -e would exit).
   if [ "$(echo "$prs" | jq 'length')" -gt 0 ]; then

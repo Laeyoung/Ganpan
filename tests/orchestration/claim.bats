@@ -40,6 +40,17 @@ setup() {
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   grep -q 'api --method DELETE /repos/o/r/issues/comments/11' "$GH_CALLS"  # deleted OUR comment (id 11), not the winner's
+  grep -q 'issue edit 7 --remove-assignee botx' "$GH_CALLS"                # released the assignee on loss
+}
+
+@test "claim comment write fails → label rolled back to agent-ready, exit 2 (not stuck)" {
+  queue_response '[{"number":30,"createdAt":"2026-01-01T00:00:00Z"}]'   # list (read, emitted before the fail)
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  export GH_FAIL_MATCH='issue comment'   # only the claim-comment write fails
+  run bash "$SCRIPT"
+  [ "$status" -eq 2 ]
+  grep -q 'issue edit 30 --add-label status:in-progress --remove-label status:agent-ready' "$GH_CALLS"  # marked
+  grep -q 'issue edit 30 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"   # rolled back
 }
 
 @test "propagation lag: comment not yet visible → backoff retry then succeed" {
