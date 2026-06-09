@@ -25,7 +25,10 @@ while read -r issue; do
     | if $len==0 then "no" else (if ($m[($len-1)].body|startswith("rework-requested:")) then "yes" else "no" end) end')
   if [ "$unresolved" = "yes" ]; then log INFO "#$issue unresolved rework, skip"; continue; fi
 
-  token=$(echo "$view" | jq -r --arg b "$BOT" 'first(.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .body) // empty' | sed 's/^claim: //')
+  # Pick the NEWEST bot claim token (lexicographic max == latest heartbeat, since the
+  # token's leading ISO8601 is fixed-width). first()/oldest could be a stale comment left
+  # by a crashed loser and would make a live, actively-heartbeating issue look timed out.
+  token=$(echo "$view" | jq -r --arg b "$BOT" '[.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .body] | max // empty' | sed 's/^claim: //')
   [ -z "$token" ] && { log WARN "#$issue no claim token, skip"; continue; }
   iso="${token%%Z-*}Z"
   tepoch=$(iso_to_epoch "$iso" 2>/dev/null || echo 0)
@@ -36,15 +39,19 @@ while read -r issue; do
 
   # timed out: check for open PR on branch issue-<n>
   prs=$(gh pr list --head "issue-$issue" --state open --json number --repo "$REPO" || echo '[]')
+  # Each branch is guarded so one issue's API failure logs and skips to the next issue
+  # rather than aborting the whole sweep (we run in the main shell, so set -e would exit).
   if [ "$(echo "$prs" | jq 'length')" -gt 0 ]; then
     pr=$(echo "$prs" | jq -r '.[0].number')
-    gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO"
-    gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO"
+    { gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO" \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO"; } \
+      || { log WARN "#$issue reclaim→blocked failed, skip"; continue; }
     log INFO "#$issue → blocked (open PR #$pr)"
   else
-    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO"
-    gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO"
-    gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO"
+    { gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" \
+      && gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO"; } \
+      || { log WARN "#$issue reclaim→agent-ready failed, skip"; continue; }
     log INFO "#$issue → agent-ready"
   fi
 done < <(echo "$list" | jq -r '.[].number')

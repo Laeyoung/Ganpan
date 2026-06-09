@@ -33,6 +33,7 @@ setup() {
   [ "$status" -eq 0 ]
   grep -q 'issue edit 5 --add-label status:blocked' "$GH_CALLS"
   ! grep -q 'issue edit 5 --add-label status:agent-ready' "$GH_CALLS"
+  grep -q 'issue comment 5 --body reclaimed: orphan lock, PR #99' "$GH_CALLS"  # human-notification posted
 }
 
 @test "timed-out with no PR → reset to agent-ready, assignee removed" {
@@ -59,6 +60,17 @@ setup() {
   run bash "$SCRIPT"
   [ "$status" -eq 0 ]
   ! grep -q 'issue edit 11' "$GH_CALLS"
+}
+
+@test "newest bot claim token decides liveness (stale leftover comment ignored)" {
+  queue_response '[{"number":20}]'
+  recent=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # a stale claim left by a crashed loser PLUS a fresh heartbeat on the live claim;
+  # max() must pick the fresh token → issue is alive → must NOT be reclaimed.
+  queue_response "{\"comments\":[{\"author\":{\"login\":\"botx\"},\"body\":\"claim: 2000-01-01T00:00:00Z-botx-h-1\"},{\"author\":{\"login\":\"botx\"},\"body\":\"claim: ${recent}-botx-h-2\"}]}"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  ! grep -q 'issue edit 20' "$GH_CALLS"
 }
 
 @test "claim/rework markers from a non-bot author are ignored" {

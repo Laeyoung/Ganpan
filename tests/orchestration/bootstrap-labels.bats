@@ -20,3 +20,10 @@ setup() {
   bash "$SCRIPT" "$LABELS"
   grep -q 'label create status:in-progress --color fbca04 --description' "$GH_CALLS"
 }
+
+@test "uses --force so re-running is idempotent (create-or-update)" {
+  bash "$SCRIPT" "$LABELS"
+  # --force on every label create; without it a second bootstrap run would error on existing labels
+  run grep -c 'label create .* --force' "$GH_CALLS"
+  [ "$output" -eq 7 ]
+}

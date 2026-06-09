@@ -19,7 +19,9 @@ load_config() {
   WORKTREE_BASE=$(jq -er '.worktreeBaseDir' "$cfg")   || { log ERROR "worktreeBaseDir missing"; return 1; }
   PROJECT_NUMBER=$(jq -r '.project.number // "null"' "$cfg")
   PROJECT_STATUS_FIELD=$(jq -er '.project.statusField' "$cfg") || { log ERROR "project.statusField missing"; return 1; }
-  WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$"
+  # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
+  # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
+  WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
   export REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
 }
 

@@ -11,7 +11,8 @@ BACKOFF="${CLAIM_BACKOFF_SECS:-3}"
 RETRIES="${CLAIM_RETRIES:-3}"
 
 # 1. candidate selection: top-N by createdAt, random pick
-candidates=$(gh issue list --label status:agent-ready --json number,createdAt --limit 1000 --repo "$REPO")
+candidates=$(gh issue list --label status:agent-ready --json number,createdAt --limit 1000 --repo "$REPO") \
+  || { log ERROR "issue list failed"; exit 1; }
 n=$(echo "$candidates" | jq 'length')
 [ "$n" -eq 0 ] && { log INFO "no agent-ready candidates"; exit 1; }
 top=$(echo "$candidates" | jq --argjson k "$CANDIDATE_N" 'sort_by(.createdAt)[:$k] | map(.number)')
@@ -19,11 +20,20 @@ topn=$(echo "$top" | jq 'length')
 pick_idx=$(( RANDOM % topn ))
 issue=$(echo "$top" | jq -r ".[$pick_idx]")
 
-# 2. mark in-progress + assignee + claim comment
+# 2. mark in-progress + assignee + claim comment.
+# The claim comment IS the lock token; if it can't be written we must roll the label back
+# to status:agent-ready, otherwise the issue is stuck in-progress with no token (reclaim
+# skips token-less in-progress issues, so it would never recover). Assignee is cosmetic
+# (the later check is presence-only), so a failure there does not block the claim.
 token="${CLAIM_TOKEN_OVERRIDE:-$(claim_token)}"
-gh issue edit "$issue" --add-label status:in-progress --remove-label status:agent-ready --repo "$REPO"
-gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO"
-gh issue comment "$issue" --body "claim: $token" --repo "$REPO"
+gh issue edit "$issue" --add-label status:in-progress --remove-label status:agent-ready --repo "$REPO" \
+  || { log ERROR "mark in-progress failed on #$issue"; exit 2; }
+gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" || log WARN "add-assignee failed on #$issue (continuing)"
+gh issue comment "$issue" --body "claim: $token" --repo "$REPO" || {
+  log ERROR "claim comment failed on #$issue, rolling back label"
+  gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" || true
+  exit 2
+}
 
 # 3. re-read with backoff until our claim comment is visible
 view=""
