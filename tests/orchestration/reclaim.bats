@@ -63,6 +63,15 @@ setup() {
   ! grep -q 'issue edit 11' "$GH_CALLS"
 }
 
+@test "pr-list API failure on a timed-out issue → skipped (not reclaimed)" {
+  queue_response '[{"number":40}]'                                   # in-progress list
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'  # timed out
+  export GH_FAIL_MATCH='pr list'   # the open-PR check fails → must not assume "no PR" and reset
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  ! grep -q 'issue edit 40' "$GH_CALLS"
+}
+
 @test "newest bot claim token decides liveness (stale leftover comment ignored)" {
   queue_response '[{"number":20}]'
   recent=$(date -u +%Y-%m-%dT%H:%M:%SZ)

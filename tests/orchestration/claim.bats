@@ -15,6 +15,20 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "multiple candidates → picks one of the top-N and claims it" {
+  # candidateN=3 (setup); all three are within the top-3 by createdAt, so the random pick
+  # must yield one of them — exercises the sort_by/slice/RANDOM-pick path (single-candidate
+  # tests never do).
+  queue_response '[{"number":50,"createdAt":"2026-01-03T00:00:00Z"},{"number":51,"createdAt":"2026-01-02T00:00:00Z"},{"number":52,"createdAt":"2026-01-01T00:00:00Z"}]'
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  # the re-read view is returned by call order regardless of which issue was picked; the
+  # claim comment matches our pinned token so the visibility check passes either way.
+  queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "50" || "$output" == "51" || "$output" == "52" ]]
+}
+
 @test "clean claim → exit 0, prints issue number, writes label+assignee+claim comment" {
   queue_response '[{"number":42,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
   # re-read after claim: in-progress present, single bot assignee, one claim token.
