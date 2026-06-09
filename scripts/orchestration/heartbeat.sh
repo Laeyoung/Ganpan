@@ -9,8 +9,11 @@ load_config
 
 issue="${1:?issue number required}"
 view=$(gh issue view "$issue" --json comments --repo "$REPO") || { log ERROR "view failed"; exit 1; }
+# Patch the NEWEST bot claim comment (max by body == latest token), matching the comment
+# reclaim.sh treats as the live lock. Old claim comments linger (reclaim doesn't delete
+# them), so first()/oldest would refresh a stale comment and leave the real lock to expire.
 cid=$(echo "$view" | jq -r --arg b "$BOT" \
-  'first(.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .id) // empty')
+  '[.comments[] | select(.author.login==$b and (.body|startswith("claim: ")))] | (max_by(.body).id // empty)')
 [ -z "$cid" ] && { log ERROR "no claim comment on #$issue"; exit 1; }
 token="${CLAIM_TOKEN_OVERRIDE:-$(claim_token)}"
 gh api --method PATCH "/repos/$REPO/issues/comments/$cid" -f body="claim: $token" >/dev/null \

@@ -23,3 +23,13 @@ setup() {
   run bash "$SCRIPT" 42
   [ "$status" -eq 1 ]
 }
+
+@test "with multiple bot claim comments, patches the NEWEST (matches reclaim's max)" {
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  # id 100 = stale (old token, left by an earlier reclaim cycle); id 200 = live (newer token).
+  queue_response '{"comments":[{"id":100,"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-9"},{"id":200,"author":{"login":"botx"},"body":"claim: 2025-01-01T00:00:00Z-botx-h-2"}]}'
+  run bash "$SCRIPT" 42
+  [ "$status" -eq 0 ]
+  grep -q 'api --method PATCH /repos/o/r/issues/comments/200' "$GH_CALLS"   # newest
+  ! grep -q 'api --method PATCH /repos/o/r/issues/comments/100' "$GH_CALLS" # not the stale one
+}

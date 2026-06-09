@@ -6,6 +6,12 @@
 # so it is deliberately NOT in the read-emitting case — it must not consume a
 # response slot (that would desync the queue index for later reads).
 echo "$*" >> "$GH_CALLS"
+# GH_FAIL_MATCH (extended regex): make any call whose args match it exit 1 — used to
+# exercise failure/rollback paths. Only fail WRITE calls with it; failing a queued READ
+# would leave its response unconsumed and desync the index for later reads.
+if [ -n "${GH_FAIL_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_FAIL_MATCH"; then
+  exit 1
+fi
 case "${1:-} ${2:-}" in
   "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list")
     idx_file="$GH_RESPONSES/.idx"
