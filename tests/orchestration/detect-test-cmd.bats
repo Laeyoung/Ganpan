@@ -38,3 +38,19 @@ cfg() { printf '%s' "$1" > "$ORCH_CONFIG"; }
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "auto-detect pytest from pyproject.toml" {
+  cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
+  printf '[tool.pytest.ini_options]\n' > "$WORK/pyproject.toml"
+  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  [ "$output" = "pytest" ]
+}
+
+@test "build and lint kinds auto-detect their Makefile targets" {
+  cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
+  printf 'build:\n\techo b\nlint:\n\techo l\n' > "$WORK/Makefile"
+  run bash -c "cd '$WORK' && '$SCRIPT' build"
+  [ "$output" = "make build" ]
+  run bash -c "cd '$WORK' && '$SCRIPT' lint"
+  [ "$output" = "make lint" ]
+}

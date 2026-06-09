@@ -44,3 +44,31 @@ setup() {
   grep -q 'issue edit 6 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
   grep -q 'issue edit 6 --remove-assignee botx' "$GH_CALLS"
 }
+
+@test "unparseable claim timestamp → skipped (no spurious reclaim)" {
+  queue_response '[{"number":10}]'
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: BADDATE-botx-h-1"}]}'  # iso_to_epoch → 0
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  ! grep -q 'issue edit 10' "$GH_CALLS"
+}
+
+@test "no claim token → skipped" {
+  queue_response '[{"number":11}]'
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"PR: https://x"}]}'  # no claim: marker
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  ! grep -q 'issue edit 11' "$GH_CALLS"
+}
+
+@test "claim/rework markers from a non-bot author are ignored" {
+  queue_response '[{"number":12}]'
+  # an outsider posts a fresh-looking claim AND a rework-requested; neither is the bot.
+  # The only bot-authored claim is ancient → issue is genuinely timed out → must reclaim.
+  recent=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  queue_response "{\"comments\":[{\"author\":{\"login\":\"attacker\"},\"body\":\"claim: ${recent}-attacker-h-1\"},{\"author\":{\"login\":\"attacker\"},\"body\":\"rework-requested: stall\"},{\"author\":{\"login\":\"botx\"},\"body\":\"claim: 2000-01-01T00:00:00Z-botx-h-1\"}]}"
+  queue_response '[]'                                              # pr list empty
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'issue edit 12 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
+}

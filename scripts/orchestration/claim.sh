@@ -52,13 +52,15 @@ fi
 echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null \
   || { log ERROR "bot not an assignee on #$issue"; exit 2; }
 
-# 4. tie-break on distinct claim tokens (single bot ⇒ assignee count can't discriminate)
-ntok=$(echo "$view" | jq '[.comments[] | select(.body|startswith("claim: ")) | .body] | unique | length')
+# 4. tie-break on distinct claim tokens (single bot ⇒ assignee count can't discriminate).
+# Only bot-authored claim comments count — any GitHub user can post "claim: …", so an
+# unfiltered count would let an outsider force a false race loss or steer the winner.
+ntok=$(echo "$view" | jq --arg b "$BOT" '[.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .body] | unique | length')
 if [ "$ntok" -ge 2 ]; then
-  winner=$(echo "$view" | jq -r '[.comments[] | select(.body|startswith("claim: ")) | (.body|sub("^claim: ";""))] | unique | sort | .[0]')
+  winner=$(echo "$view" | jq -r --arg b "$BOT" '[.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | (.body|sub("^claim: ";""))] | unique | sort | .[0]')
   if [ "$winner" != "$token" ]; then
     # we lost: delete our own claim comment, release assignee, return 2
-    cid=$(echo "$view" | jq -r --arg t "$token" 'first(.comments[] | select(.body==("claim: "+$t)) | .id) // empty')
+    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
     gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" || true
     log INFO "lost claim race on #$issue (winner=$winner)"
