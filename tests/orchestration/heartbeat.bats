@@ -9,10 +9,12 @@ setup() {
 }
 
 @test "edits the existing claim comment by id (PATCH), not --edit-last" {
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
   queue_response '{"comments":[{"id":555,"author":{"login":"botx"},"body":"claim: old-token"},{"id":556,"author":{"login":"botx"},"body":"PR: https://x"}]}'
   run bash "$SCRIPT" 42
   [ "$status" -eq 0 ]
-  grep -q 'api --method PATCH /repos/o/r/issues/comments/555' "$GH_CALLS"
+  # the refreshed body must actually be written (not just the comment URL hit)
+  grep -q 'api --method PATCH /repos/o/r/issues/comments/555 -f body=claim: 2026-02-01T00:00:00Z-botx-h-1' "$GH_CALLS"
   ! grep -q -- '--edit-last' "$GH_CALLS"
 }
 

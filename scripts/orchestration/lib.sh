@@ -18,7 +18,7 @@ load_config() {
   HEARTBEAT_MIN=$(jq -er '.reclaim.heartbeatMinutes' "$cfg")     || { log ERROR "reclaim.heartbeatMinutes missing"; return 1; }
   WORKTREE_BASE=$(jq -er '.worktreeBaseDir' "$cfg")   || { log ERROR "worktreeBaseDir missing"; return 1; }
   PROJECT_NUMBER=$(jq -r '.project.number // "null"' "$cfg")
-  PROJECT_STATUS_FIELD=$(jq -er '.project.statusField' "$cfg")
+  PROJECT_STATUS_FIELD=$(jq -er '.project.statusField' "$cfg") || { log ERROR "project.statusField missing"; return 1; }
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$"
   export REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
 }
@@ -30,7 +30,7 @@ now_epoch() { date -u +%s; }
 
 # GNU date first, BSD date fallback (macOS).
 iso_to_epoch() {
-  date -u -d "$1" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s
+  date -u -d "$1" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null
 }
 
 # project_sync <issue#> <statusValue> — no-op when PROJECT_NUMBER == "null".

@@ -30,3 +30,10 @@ setup() {
   grep -q 'issue list --label status:in-review --limit 1000' "$GH_CALLS"
   grep -q 'issue list --label status:qa --limit 1000' "$GH_CALLS"
 }
+
+@test "gh API failure → EXCEED-free exit 2 (does not silently report OK)" {
+  export GH_EXIT=1                      # every gh call fails
+  queue_response '[]'                   # response is emitted but gh still exits 1 (pipefail catches it)
+  run bash "$SCRIPT"
+  [ "$status" -eq 2 ]
+}

@@ -10,21 +10,28 @@ list=$(gh issue list --label status:in-progress --json number --limit 1000 --rep
 now=$(now_epoch)
 timeout_secs=$(( RECLAIM_TIMEOUT_MIN * 60 ))
 
-echo "$list" | jq -r '.[].number' | while read -r issue; do
+# Process substitution (not a pipe) so the loop runs in the main shell: a pipe would
+# put `while` in a subshell, masking set -e failures and the loop's real exit status.
+while read -r issue; do
   [ -z "$issue" ] && continue
   view=$(gh issue view "$issue" --json comments --repo "$REPO") || { log WARN "view #$issue failed"; continue; }
 
-  # unresolved rework? (latest rework-requested with no later rework-resolved) → skip
-  unresolved=$(echo "$view" | jq -r '
-    [.comments[] | select(.body|startswith("rework-requested:") or startswith("rework-resolved:"))] as $m
+  # State markers are trusted only from the bot — any user can post "rework-requested:" to
+  # freeze an issue, "rework-resolved:" to unfreeze, or "claim:" to skew the timeout clock.
+  # unresolved rework? (latest bot rework-requested with no later rework-resolved) → skip
+  unresolved=$(echo "$view" | jq -r --arg b "$BOT" '
+    [.comments[] | select(.author.login==$b and (.body|startswith("rework-requested:") or startswith("rework-resolved:")))] as $m
     | ($m | length) as $len
     | if $len==0 then "no" else (if ($m[($len-1)].body|startswith("rework-requested:")) then "yes" else "no" end) end')
   if [ "$unresolved" = "yes" ]; then log INFO "#$issue unresolved rework, skip"; continue; fi
 
-  token=$(echo "$view" | jq -r 'first(.comments[] | select(.body|startswith("claim: ")) | .body) // empty' | sed 's/^claim: //')
+  token=$(echo "$view" | jq -r --arg b "$BOT" 'first(.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .body) // empty' | sed 's/^claim: //')
   [ -z "$token" ] && { log WARN "#$issue no claim token, skip"; continue; }
   iso="${token%%Z-*}Z"
   tepoch=$(iso_to_epoch "$iso" 2>/dev/null || echo 0)
+  # 0 == iso_to_epoch parse failure (malformed timestamp); skip rather than treat as
+  # epoch-0 (which would look ~56 years stale and trigger a spurious reclaim).
+  [ "$tepoch" -eq 0 ] && { log WARN "#$issue unparseable claim timestamp, skip"; continue; }
   [ $(( now - tepoch )) -le "$timeout_secs" ] && continue   # still alive
 
   # timed out: check for open PR on branch issue-<n>
@@ -40,4 +47,4 @@ echo "$list" | jq -r '.[].number' | while read -r issue; do
     gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO"
     log INFO "#$issue → agent-ready"
   fi
-done
+done < <(echo "$list" | jq -r '.[].number')
