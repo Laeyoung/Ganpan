@@ -16,13 +16,13 @@ These names/contracts are referenced by every task. Do not rename.
 
 **Config → env (set by `load_config` in `lib.sh`):** `REPO`, `BOT`, `CANDIDATE_N`, `WIP_LIMIT`, `RECLAIM_TIMEOUT_MIN`, `HEARTBEAT_MIN`, `WORKTREE_BASE`, `PROJECT_NUMBER` (string `"null"` when unset), `PROJECT_STATUS_FIELD`, `WORKER_ID` (= `${BOT}-<host>-<pid>`, per-process unique — used in claim token), plus exported `SCRIPT_DIR`.
 
-**`lib.sh` functions:** `log <LEVEL> <msg…>` (stderr), `load_config`, `claim_token` (prints `<ISO8601-UTC>-<WORKER_ID>`), `now_epoch`, `iso_to_epoch <iso>`, `gh_repo <args…>` (= `gh <args…> --repo "$REPO"`), `project_sync <issue#> <statusValue>`.
+**`lib.sh` functions:** `log <LEVEL> <msg…>` (stderr), `load_config`, `claim_token` (prints `<ISO8601-UTC>-<WORKER_ID>`), `now_epoch`, `iso_to_epoch <iso>`, `project_sync <issue#> <statusValue>`. Scripts call `gh` directly with an explicit `--repo "$REPO"` (no wrapper in v1 — the spec's optional `gh_json` retry/log wrapper is deferred; YAGNI for the stubbed test scope).
 
 **Script exit codes:** `claim.sh` 0=claimed (prints issue#) / 1=no candidates / 2=lost race. `heartbeat.sh` 0=ok / 1=api-fail. `reclaim.sh` 0=swept / 1=api-fail. `wip-check.sh` 0=OK / 1=EXCEED / 2=api-fail. `detect-test-cmd.sh <test|build|lint>` 0 always (prints command or empty).
 
 **Comment markers (bot-authored, prefix-grep):** `claim: <token>` (one per issue, edited in place by id), `rework-requested: <reason>` / `rework-resolved:` (new comments; unresolved = latest `rework-requested:` has no later `rework-resolved:`), `qa-fail-count: <N>`.
 
-**Single-bot claim discriminator:** GitHub dedups assignees to one login, so two concurrent Coder processes both assign `$BOT` → assignee count stays 1. The race discriminator is therefore the number of distinct `claim:` **tokens** on the issue: if ≥2, the lexicographically-smallest token wins; losers delete their own claim comment and release. (Assignee is kept as a human-visible marker only.)
+**Single-bot claim discriminator:** GitHub dedups assignees to one login, so two concurrent Coder processes both assign `$BOT` → assignee count stays 1. The race discriminator is therefore the number of distinct `claim:` **tokens** on the issue: if ≥2, the lexicographically-smallest token wins; losers delete their own claim comment and release. (Assignee is kept as a human-visible marker only.) Consequently `claim.sh`'s assignee verification is **presence-only** (the bot is among the assignees) — it intentionally does **not** enforce the spec §5.2 literal "exactly 1 assignee", since a human may co-assign and the token count, not the assignee count, decides the race.
 
 **Lane cwd convention:** lane sessions run from the **main repo root**. Orchestration scripts are invoked as `scripts/orchestration/<name>.sh`. `/work-issue` `cd`s into the worktree only for implement/test/commit, then returns.
 
@@ -30,21 +30,21 @@ These names/contracts are referenced by every task. Do not rename.
 
 ```
 .claude/orchestration.json                  # runtime config (Task 1)
-.claude/commands/{work-issue,triage,review-queue,qa-check}.md   # lanes (Tasks 9-12)
-.claude/loop.md                             # optional /loop default (Task 13)
+.claude/commands/{work-issue,triage,review-queue,qa-check}.md   # lanes (Tasks 10-13)
+.claude/loop.md                             # optional /loop default (Task 14)
 scripts/orchestration/lib.sh                # config+helpers (Task 2)
-scripts/orchestration/bootstrap-labels.sh   # label bootstrap (Task 3)
+tests/orchestration/helpers/{gh-stub.sh,common.bash}   # test infra (Task 3)
+scripts/orchestration/bootstrap-labels.sh   # label bootstrap (Task 4)
 scripts/orchestration/claim.sh              # atomic claim (Task 5)
 scripts/orchestration/heartbeat.sh          # liveness (Task 6)
 scripts/orchestration/reclaim.sh            # orphan sweeper (Task 7)
 scripts/orchestration/wip-check.sh          # WIP gate (Task 8)
-scripts/orchestration/detect-test-cmd.sh    # test cmd detect (Task 9 prep → its own Task 8.5)
-tests/orchestration/helpers/{gh-stub.sh,common.bash}   # test infra (Task 4)
+scripts/orchestration/detect-test-cmd.sh    # test cmd detect (Task 9)
 tests/orchestration/*.bats                  # unit tests (per script task)
-.github/labels.yml                          # label source (Task 3)
-.github/ISSUE_TEMPLATE/task.yml             # intake (Task 13)
-CLAUDE.md                                    # commit convention (Task 13)
-docs/SETUP.md                                # one-time setup (Task 13)
+.github/labels.yml                          # label source (Task 4)
+.github/ISSUE_TEMPLATE/task.yml             # intake (Task 14)
+CLAUDE.md                                    # commit convention (Task 14)
+docs/SETUP.md                                # one-time setup (Task 14)
 .gitignore                                   # ignore hb pid stragglers (Task 1)
 ```
 
@@ -56,6 +56,14 @@ docs/SETUP.md                                # one-time setup (Task 13)
 - Create: `.claude/orchestration.json`
 - Create: `.gitignore`
 - Create dirs: `scripts/orchestration/`, `tests/orchestration/helpers/`
+
+- [ ] **Step 0: Verify prerequisites are installed**
+
+Run:
+```bash
+command -v gh jq yq git bats shellcheck
+```
+Expected: a path printed for each (exit 0). If any is missing, install it before continuing (see `docs/SETUP.md` prerequisites). `bats`/`shellcheck` are needed from Task 2 onward; `yq` from Task 4; `gh`/`jq` at runtime.
 
 - [ ] **Step 1: Create directories**
 
@@ -131,7 +139,8 @@ JSON
 
 @test "load_config fails clearly when config missing" {
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/nope.json"
-  run bash -c 'source "$0"; load_config' "$LIB"
+  # merge stderr→stdout explicitly so the error message is in $output on any bats config
+  run bash -c 'source "$0"; load_config 2>&1' "$LIB"
   [ "$status" -ne 0 ]
   [[ "$output" == *"config not found"* ]]
 }
@@ -192,8 +201,6 @@ iso_to_epoch() {
   date -u -d "$1" +%s 2>/dev/null || date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s
 }
 
-gh_repo() { gh "$@" --repo "$REPO"; }
-
 # project_sync <issue#> <statusValue> — no-op when PROJECT_NUMBER == "null".
 project_sync() {
   local issue="$1" status="$2"
@@ -225,112 +232,9 @@ git commit -m "feat(orch): add lib.sh config loader and helpers"
 
 ---
 
-## Task 3: `.github/labels.yml` + `bootstrap-labels.sh` (TDD)
+## Task 3: Test infrastructure — `gh` stub + bats helper
 
-**Files:**
-- Create: `.github/labels.yml`
-- Create: `scripts/orchestration/bootstrap-labels.sh`
-- Test: `tests/orchestration/bootstrap-labels.bats`
-
-- [ ] **Step 1: Write `.github/labels.yml`**
-
-```yaml
-- name: "status:triage"
-  color: "ededed"
-  description: "분류 대기"
-- name: "status:agent-ready"
-  color: "0e8a16"
-  description: "에이전트 작업 가능 큐"
-- name: "status:in-progress"
-  color: "fbca04"
-  description: "워커 작업 중 (락)"
-- name: "status:in-review"
-  color: "1d76db"
-  description: "PR 리뷰 대기"
-- name: "status:qa"
-  color: "5319e7"
-  description: "머지됨, QA 검증 대기"
-- name: "status:done"
-  color: "0e8a16"
-  description: "완료"
-- name: "status:blocked"
-  color: "b60205"
-  description: "사람 개입 필요"
-```
-
-- [ ] **Step 2: Write the failing test**
-
-`tests/orchestration/bootstrap-labels.bats`:
-```bash
-#!/usr/bin/env bats
-
-setup() {
-  load helpers/common
-  setup_gh_stub
-  export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
-  printf '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
-  SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/bootstrap-labels.sh"
-  LABELS="$BATS_TEST_DIRNAME/../../.github/labels.yml"
-}
-
-@test "creates all 7 labels via gh label create" {
-  run bash "$SCRIPT" "$LABELS"
-  [ "$status" -eq 0 ]
-  run grep -c '^label create' "$GH_CALLS"
-  [ "$output" -eq 7 ]
-}
-
-@test "passes name color and description for each label" {
-  bash "$SCRIPT" "$LABELS"
-  grep -q 'label create status:in-progress --color fbca04 --description' "$GH_CALLS"
-}
-```
-
-- [ ] **Step 3: Run to verify it fails**
-
-Run: `bats tests/orchestration/bootstrap-labels.bats`
-Expected: FAIL (script + stub helper missing — Task 4 adds the helper; if running before Task 4, this fails on `load helpers/common`). Run after Task 4 if needed; for now expect FAIL.
-
-> Note: this task depends on the `common.bash` helper from Task 4. If executing strictly in order, do Task 4 first, then return here. The plan lists labels first because Task 4's stub is generic test infra.
-
-- [ ] **Step 4: Write `scripts/orchestration/bootstrap-labels.sh`**
-
-```bash
-#!/usr/bin/env bash
-# bootstrap-labels.sh <labels.yml> — idempotently create status labels.
-set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-source "$DIR/lib.sh"
-load_config
-
-labels_file="${1:-$DIR/../../.github/labels.yml}"
-count=$(yq -o=json '. | length' "$labels_file")
-for i in $(seq 0 $((count - 1))); do
-  name=$(yq -r ".[$i].name" "$labels_file")
-  color=$(yq -r ".[$i].color" "$labels_file")
-  desc=$(yq -r ".[$i].description" "$labels_file")
-  # --force makes it idempotent: create or update.
-  gh label create "$name" --color "$color" --description "$desc" --force --repo "$REPO"
-  log INFO "label ensured: $name"
-done
-```
-
-- [ ] **Step 5: Run to verify it passes**
-
-Run: `bats tests/orchestration/bootstrap-labels.bats`
-Expected: 2 tests PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add .github/labels.yml scripts/orchestration/bootstrap-labels.sh tests/orchestration/bootstrap-labels.bats
-git commit -m "feat(orch): add label bootstrap from labels.yml"
-```
-
----
-
-## Task 4: Test infrastructure — `gh` stub + bats helper
+> Built **before** any script test because every `*.bats` file depends on it.
 
 **Files:**
 - Create: `tests/orchestration/helpers/gh-stub.sh`
@@ -341,11 +245,14 @@ git commit -m "feat(orch): add label bootstrap from labels.yml"
 ```bash
 #!/usr/bin/env bash
 # Fake `gh` for bats. Logs each call (subcommand-first) to $GH_CALLS.
-# For stdout-producing read commands, emits the next queued response file
+# For stdout-producing READ commands, emits the next queued response file
 # $GH_RESPONSES/<n> in call order. Exit code overridable via $GH_EXIT.
+# NOTE: `gh api` is only used for WRITES here (PATCH heartbeat, DELETE claim),
+# so it is deliberately NOT in the read-emitting case — it must not consume a
+# response slot (that would desync the queue index for later reads).
 echo "$*" >> "$GH_CALLS"
 case "${1:-} ${2:-}" in
-  "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list"|"api "*|"api")
+  "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list")
     idx_file="$GH_RESPONSES/.idx"
     n=$(( $(cat "$idx_file" 2>/dev/null || echo 0) + 1 ))
     echo "$n" > "$idx_file"
@@ -373,6 +280,9 @@ setup_gh_stub() {
 }
 
 # queue_response <json-or-text> — enqueue stdout for the next read-style gh call.
+# Counts only digit-prefixed files (the stub's .idx dotfile is invisible to plain ls),
+# so write-time indices here stay in lockstep with the stub's read-time .idx counter
+# as long as all responses are queued before the script under test runs.
 queue_response() {
   local n
   n=$(( $(ls "$GH_RESPONSES" 2>/dev/null | grep -c '^[0-9]') + 1 ))
@@ -416,6 +326,109 @@ Expected: 2 tests PASS.
 ```bash
 git add tests/orchestration/helpers/gh-stub.sh tests/orchestration/helpers/common.bash tests/orchestration/stub.bats
 git commit -m "test(orch): add gh stub and bats helpers"
+```
+
+---
+
+## Task 4: `.github/labels.yml` + `bootstrap-labels.sh` (TDD)
+
+**Files:**
+- Create: `.github/labels.yml`
+- Create: `scripts/orchestration/bootstrap-labels.sh`
+- Test: `tests/orchestration/bootstrap-labels.bats`
+
+- [ ] **Step 1: Write `.github/labels.yml`**
+
+```yaml
+- name: "status:triage"
+  color: "ededed"
+  description: "분류 대기"
+- name: "status:agent-ready"
+  color: "0e8a16"
+  description: "에이전트 작업 가능 큐"
+- name: "status:in-progress"
+  color: "fbca04"
+  description: "워커 작업 중 (락)"
+- name: "status:in-review"
+  color: "1d76db"
+  description: "PR 리뷰 대기"
+- name: "status:qa"
+  color: "5319e7"
+  description: "머지됨, QA 검증 대기"
+- name: "status:done"
+  color: "0e8a16"
+  description: "완료"
+- name: "status:blocked"
+  color: "b60205"
+  description: "사람 개입 필요"
+```
+
+- [ ] **Step 2: Write the failing test** (test infra from Task 3 is now in place)
+
+`tests/orchestration/bootstrap-labels.bats`:
+```bash
+#!/usr/bin/env bats
+
+setup() {
+  load helpers/common
+  setup_gh_stub
+  export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
+  printf '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
+  SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/bootstrap-labels.sh"
+  LABELS="$BATS_TEST_DIRNAME/../../.github/labels.yml"
+}
+
+@test "creates all 7 labels via gh label create" {
+  run bash "$SCRIPT" "$LABELS"
+  [ "$status" -eq 0 ]
+  run grep -c '^label create' "$GH_CALLS"
+  [ "$output" -eq 7 ]
+}
+
+@test "passes name color and description for each label" {
+  bash "$SCRIPT" "$LABELS"
+  grep -q 'label create status:in-progress --color fbca04 --description' "$GH_CALLS"
+}
+```
+
+- [ ] **Step 3: Run to verify it fails**
+
+Run: `bats tests/orchestration/bootstrap-labels.bats`
+Expected: FAIL (`bootstrap-labels.sh` does not exist yet).
+
+- [ ] **Step 4: Write `scripts/orchestration/bootstrap-labels.sh`**
+
+```bash
+#!/usr/bin/env bash
+# bootstrap-labels.sh <labels.yml> — idempotently create status labels.
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$DIR/lib.sh"
+load_config
+
+labels_file="${1:-$DIR/../../.github/labels.yml}"
+count=$(yq -o=json '. | length' "$labels_file")
+for i in $(seq 0 $((count - 1))); do
+  name=$(yq -r ".[$i].name" "$labels_file")
+  color=$(yq -r ".[$i].color" "$labels_file")
+  desc=$(yq -r ".[$i].description" "$labels_file")
+  # --force makes it idempotent: create or update.
+  gh label create "$name" --color "$color" --description "$desc" --force --repo "$REPO"
+  log INFO "label ensured: $name"
+done
+```
+
+- [ ] **Step 5: Run to verify it passes**
+
+Run: `bats tests/orchestration/bootstrap-labels.bats`
+Expected: 2 tests PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .github/labels.yml scripts/orchestration/bootstrap-labels.sh tests/orchestration/bootstrap-labels.bats
+git commit -m "feat(orch): add label bootstrap from labels.yml"
 ```
 
 ---
@@ -522,28 +535,38 @@ gh issue comment "$issue" --body "claim: $token" --repo "$REPO"
 
 # 3. re-read with backoff until our claim comment is visible
 view=""
+seen=0
 for _ in $(seq 1 "$RETRIES"); do
   sleep "$BACKOFF"
   view=$(gh issue view "$issue" --json labels,assignees,comments --repo "$REPO")
   if echo "$view" | jq -e --arg t "$token" \
       '.comments[] | select(.body == ("claim: " + $t))' >/dev/null; then
-    break
+    seen=1; break
   fi
 done
+# our claim comment never became visible → unconfirmed, treat as lost (do NOT echo success)
+[ "$seen" -eq 1 ] || { log ERROR "claim comment not visible after $RETRIES retries on #$issue"; exit 2; }
 
-# ensure in-progress is present (re-add if transient race removed it)
+# ensure in-progress is present (re-add if a transient race removed it)
 if ! echo "$view" | jq -e '.labels[] | select(.name=="status:in-progress")' >/dev/null; then
   gh issue edit "$issue" --add-label status:in-progress --repo "$REPO"
 fi
 
-# 4. tie-break on distinct claim tokens (single bot ⇒ assignee can't discriminate)
-tokens=$(echo "$view" | jq -r '.comments[] | select(.body|startswith("claim: ")) | .body | sub("^claim: ";"")' | sort -u)
-ntok=$(echo "$tokens" | grep -c . || true)
+# spec §5.2 step 3 (adapted): verify the bot is among the assignees. We deliberately do
+# NOT enforce the spec's literal "exactly 1 assignee" — under the single-bot model the
+# authoritative race discriminator is the claim-token count (below; see "Single-bot claim
+# discriminator" in the plan header), and a human may legitimately co-assign an issue, so
+# an exactly-1 check would cause false losses.
+echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null \
+  || { log ERROR "bot not an assignee on #$issue"; exit 2; }
+
+# 4. tie-break on distinct claim tokens (single bot ⇒ assignee count can't discriminate)
+ntok=$(echo "$view" | jq '[.comments[] | select(.body|startswith("claim: ")) | .body] | unique | length')
 if [ "$ntok" -ge 2 ]; then
-  winner=$(echo "$tokens" | sort | head -n1)
+  winner=$(echo "$view" | jq -r '[.comments[] | select(.body|startswith("claim: ")) | (.body|sub("^claim: ";""))] | unique | sort | .[0]')
   if [ "$winner" != "$token" ]; then
     # we lost: delete our own claim comment, release assignee, return 2
-    cid=$(echo "$view" | jq -r --arg t "$token" '.comments[] | select(.body==("claim: "+$t)) | .id' | head -n1)
+    cid=$(echo "$view" | jq -r --arg t "$token" 'first(.comments[] | select(.body==("claim: "+$t)) | .id) // empty')
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
     gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" || true
     log INFO "lost claim race on #$issue (winner=$winner)"
@@ -1180,6 +1203,7 @@ Format: `type(scope): subject`
 5. **(Optional) GitHub Project:** create it, set `project.number`; otherwise leave `null` (sync becomes a no-op).
 6. **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, no direct push, **include administrators**, restrict review dismissal. Bot token must **not** be admin.
 7. **Issue template** is already at `.github/ISSUE_TEMPLATE/task.yml` (auto-labels new issues `status:triage`).
+8. **Worktree dependency strategy.** Decide how per-issue worktrees share dependencies (e.g. symlink `node_modules`/`.venv` from the main checkout vs reinstall per worktree). For Node, symlinking the gitignored `node_modules` into each `wt-issue-*` avoids re-install; pick the equivalent for the target repo's toolchain (spec §7.4 step 7 / §12 — repo-specific, decide here).
 
 ## Run the lanes (separate terminals)
 - Triager: `/loop 10m /triage`
