@@ -25,6 +25,16 @@ setup() {
   ! grep -q 'issue edit 4' "$GH_CALLS"
 }
 
+@test "rework resolved after rework-requested → timed-out issue IS reclaimed" {
+  queue_response '[{"number":21}]'
+  # markers in order: requested then resolved ⇒ latest is resolved ⇒ NOT frozen ⇒ reclaim proceeds
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"},{"author":{"login":"botx"},"body":"rework-requested: fix"},{"author":{"login":"botx"},"body":"rework-resolved:"}]}'
+  queue_response '[]'   # pr list empty
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'issue edit 21 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
+}
+
 @test "timed-out with open PR → blocked (not agent-ready)" {
   queue_response '[{"number":5}]'
   queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'  # view comments
