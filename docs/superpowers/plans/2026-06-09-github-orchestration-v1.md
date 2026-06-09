@@ -285,7 +285,9 @@ setup_gh_stub() {
 # as long as all responses are queued before the script under test runs.
 queue_response() {
   local n
-  n=$(( $(ls "$GH_RESPONSES" 2>/dev/null | grep -c '^[0-9]') + 1 ))
+  # `|| true`: grep -c exits 1 on zero matches; without it the failed substitution
+  # aborts the test under bats errexit when the responses dir is still empty.
+  n=$(( $(ls "$GH_RESPONSES" 2>/dev/null | grep -c '^[0-9]' || true) + 1 ))
   printf '%s' "$1" > "$GH_RESPONSES/$n"
 }
 ```
