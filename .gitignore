@@ -1,0 +1,2 @@
+# heartbeat pid files are written to $TMPDIR, but ignore strays just in case
+hb-*.pid
