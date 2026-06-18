@@ -5,7 +5,7 @@ setup() {
   setup_gh_stub
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   printf '{"repo":"o/r","bot":"botx","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
-  SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/heartbeat.sh"
+  SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/heartbeat.sh"
 }
 
 @test "edits the existing claim comment by id (PATCH), not --edit-last" {

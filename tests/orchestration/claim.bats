@@ -6,7 +6,7 @@ setup() {
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   printf '{"repo":"o/r","bot":"botx","candidateN":3,"wipLimit":5,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
   export CLAIM_BACKOFF_SECS=0   # make tests fast
-  SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/claim.sh"
+  SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/claim.sh"
 }
 
 @test "no candidates → exit 1" {

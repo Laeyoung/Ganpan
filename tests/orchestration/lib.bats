@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 setup() {
-  LIB="$BATS_TEST_DIRNAME/../../scripts/orchestration/lib.sh"
+  LIB="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/lib.sh"
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   cat > "$ORCH_CONFIG" <<'JSON'
 { "repo":"o/r","bot":"botx","candidateN":3,"wipLimit":4,
@@ -35,4 +35,14 @@ JSON
   run bash -c 'source "$0"; iso_to_epoch 1970-01-01T00:00:00Z' "$LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "0" ]
+}
+
+@test "load_config finds ./.claude/orchestration.json from cwd when ORCH_CONFIG unset" {
+  work="$BATS_TEST_TMPDIR/proj"
+  mkdir -p "$work/.claude"
+  cp "$ORCH_CONFIG" "$work/.claude/orchestration.json"
+  # unset the override and run from inside $work so only the cwd fallback can resolve it
+  run bash -c 'unset ORCH_CONFIG; cd "$1"; source "$2"; load_config; echo "$REPO"' _ "$work" "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "o/r" ]
 }
