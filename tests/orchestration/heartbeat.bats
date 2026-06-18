@@ -5,6 +5,7 @@ setup() {
   setup_gh_stub
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   printf '{"repo":"o/r","bot":"botx","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
+  export GH_STUB_LOGIN=botx     # gh actor matches config.bot so the identity gate passes
   SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/heartbeat.sh"
 }
 
@@ -32,4 +33,13 @@ setup() {
   [ "$status" -eq 0 ]
   grep -q 'api --method PATCH /repos/o/r/issues/comments/200' "$GH_CALLS"   # newest
   ! grep -q 'api --method PATCH /repos/o/r/issues/comments/100' "$GH_CALLS" # not the stale one
+}
+
+@test "actor mismatch → aborts before PATCH" {
+  export GH_STUB_LOGIN=intruder
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  queue_response '{"comments":[{"id":555,"author":{"login":"botx"},"body":"claim: old-token"}]}'  # would be PATCHed without the gate
+  run bash "$SCRIPT" 42
+  [ "$status" -ne 0 ]
+  ! grep -q 'api --method PATCH' "$GH_CALLS"
 }
