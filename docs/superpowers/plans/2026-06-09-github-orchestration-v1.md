@@ -285,7 +285,9 @@ setup_gh_stub() {
 # as long as all responses are queued before the script under test runs.
 queue_response() {
   local n
-  n=$(( $(ls "$GH_RESPONSES" 2>/dev/null | grep -c '^[0-9]') + 1 ))
+  # `|| true`: grep -c exits 1 on zero matches; without it the failed substitution
+  # aborts the test under bats errexit when the responses dir is still empty.
+  n=$(( $(ls "$GH_RESPONSES" 2>/dev/null | grep -c '^[0-9]' || true) + 1 ))
   printf '%s' "$1" > "$GH_RESPONSES/$n"
 }
 ```
@@ -890,6 +892,8 @@ git commit -m "feat(orch): add WIP gate over in-review+qa"
 ```bash
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0  # for `run --separate-stderr` in the last test
+
 setup() {
   SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/detect-test-cmd.sh"
   WORK="$BATS_TEST_TMPDIR/proj"; mkdir -p "$WORK"
@@ -920,7 +924,10 @@ cfg() { printf '%s' "$1" > "$ORCH_CONFIG"; }
 
 @test "nothing detected → empty output, exit 0" {
   cfg '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}'
-  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  # --separate-stderr: the script intentionally logs a diagnostic to stderr on the
+  # no-detection path; callers consume only stdout via $(...). Assert stdout is empty.
+  # (bats `run` otherwise merges stderr into $output, which would fail [ -z "$output" ].)
+  run --separate-stderr bash -c "cd '$WORK' && '$SCRIPT' test"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
