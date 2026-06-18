@@ -2,7 +2,7 @@
 # install.sh — install the GitHub-native orchestration toolkit into a target repo.
 #
 # Usage:
-#   ./install.sh <target-repo-path> [--with-tests]
+#   ./install.sh <target-repo-path>
 #
 # Copies the portable toolkit (scripts, lane commands, labels, issue template,
 # setup docs) into <target-repo-path>. Repo-specific files are handled safely:
@@ -12,6 +12,7 @@
 #
 # After running, edit <target>/.claude/orchestration.json (repo, bot) and follow
 # the printed next steps (see <target>/docs/SETUP.md).
+
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,19 +25,17 @@ info() { printf '  %s\n' "$*"; }
 
 # --- args ---------------------------------------------------------------------
 TARGET=""
-WITH_TESTS=0
 FORCE=""
 for arg in "$@"; do
   case "$arg" in
-    --with-tests) WITH_TESTS=1 ;;
     --force) FORCE=1 ;;
     -h|--help)
-      grep -E '^# ' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+      sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//;/^$/d'; exit 0 ;;
     -*) die "unknown flag: $arg" ;;
     *) if [ -z "${TARGET:-}" ]; then TARGET="$arg"; else die "unexpected arg: $arg"; fi ;;
   esac
 done
-[ -n "$TARGET" ] || die "usage: ./install.sh <target-repo-path> [--with-tests]"
+[ -n "$TARGET" ] || die "usage: ./install.sh <target-repo-path>"
 [ -d "$TARGET" ] || die "target is not a directory: $TARGET"
 TARGET="$(cd "$TARGET" && pwd)"
 [ "$TARGET" = "$SRC" ] && die "target must differ from the toolkit source ($SRC)"
@@ -70,7 +69,7 @@ needs_write() {
   local dest="$1" cur
   [ ! -f "$dest" ] && return 0                                 # absent → write
   [ -n "$FORCE" ] && return 0                                  # --force → overwrite
-  cur=$(grep -m1 "$SENTINEL_TOKEN" "$dest" || true)
+  cur=$(grep -Fm1 "$SENTINEL_TOKEN" "$dest" || true)
   [ -n "$cur" ] && return 1                                    # same version sentinel present → skip
   grep -q 'ganpan-orchestration:' "$dest" && return 0          # different version → overwrite
   echo "warn: $dest has no sentinel (user-owned); skipping (use --force)"; return 1
@@ -91,14 +90,7 @@ for name in work-issue triage review-queue qa-check; do
 done
 info ".claude/commands/{work-issue,triage,review-queue,qa-check}.md"
 
-if [ "$WITH_TESTS" -eq 1 ]; then
-  mkdir -p "$TARGET/tests/orchestration/helpers"
-  cp "$SRC"/tests/orchestration/*.bats "$TARGET/tests/orchestration/"
-  cp "$SRC"/tests/orchestration/helpers/* "$TARGET/tests/orchestration/helpers/"
-  info "tests/orchestration/ (bats suite)"
-fi
-
-# --- 3. CLAUDE.md (create or append conventions once) -------------------------
+# --- 4. CLAUDE.md (create or append conventions once) -------------------------
 echo
 echo "Conventions (CLAUDE.md):"
 SENTINEL="<!-- orchestration-conventions -->"
@@ -123,6 +115,5 @@ Done. Next steps (details in $TARGET/docs/SETUP.md):
   3. Bootstrap labels:
        cd "$TARGET" && scripts/orchestration/bootstrap-labels.sh .github/labels.yml
   4. Branch protection on main         → require 1 human review; bot is NOT admin
-$( [ "$WITH_TESTS" -eq 1 ] && echo "  5. Verify:  cd \"$TARGET\" && bats tests/orchestration/" )
-  6. Run lanes:  /loop /work-issue · /loop 10m /triage · /loop 5m /review-queue · /qa-check
+  5. Run lanes:  /loop /work-issue · /loop 10m /triage · /loop 5m /review-queue · /qa-check
 EOF
