@@ -6,6 +6,7 @@ setup() {
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   printf '{"repo":"o/r","bot":"botx","candidateN":3,"wipLimit":5,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
   export CLAIM_BACKOFF_SECS=0   # make tests fast
+  export GH_STUB_LOGIN=botx     # gh actor matches config.bot so the identity gate passes
   SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/claim.sh"
 }
 
@@ -123,4 +124,15 @@ setup() {
   [ "$output" = "15" ]
   # the re-add is a bare --add-label (no --remove-label), distinct from the initial mark
   grep -q 'issue edit 15 --add-label status:in-progress --repo' "$GH_CALLS"
+}
+
+@test "actor mismatch (wrong gh login) → aborts before any write" {
+  export GH_STUB_LOGIN=intruder
+  queue_response '[{"number":42,"createdAt":"2026-01-01T00:00:00Z"}]'   # would be claimed without the gate
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  run bash "$SCRIPT"
+  [ "$status" -ne 0 ]
+  ! grep -q 'issue edit' "$GH_CALLS"
+  ! grep -q 'issue comment' "$GH_CALLS"
 }

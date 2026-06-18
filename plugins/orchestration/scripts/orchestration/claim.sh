@@ -6,6 +6,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$DIR/lib.sh"
 load_config
+require_bot_actor || exit 1
 
 BACKOFF="${CLAIM_BACKOFF_SECS:-3}"
 RETRIES="${CLAIM_RETRIES:-3}"
