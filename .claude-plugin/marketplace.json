@@ -1,9 +1,9 @@
 {
-  "name": "ganpan",
+  "name": "laeyoung",
   "owner": { "name": "Laeyoung Chang" },
   "plugins": [
     {
-      "name": "orchestration",
+      "name": "ganpan",
       "source": "./plugins/orchestration",
       "description": "GitHub-native agent orchestration lanes + /orch-setup."
     }
