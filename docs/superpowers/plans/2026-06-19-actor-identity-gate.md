@@ -31,7 +31,7 @@
 | `plugins/orchestration/scripts/orchestration/reclaim.sh` | revert orphan locks | **add** gate call |
 | `tests/orchestration/{claim,heartbeat,reclaim}.bats` | engine tests | **add** `GH_STUB_LOGIN=botx` to setup + one mismatch test each |
 | `plugins/orchestration/commands/{triage,review-queue,work-issue,qa-check}.md` | lane commands | **add** gate preamble |
-| `plugins/orchestration/commands/orch-setup.md` | setup lane | **add** actor-print warning |
+| `plugins/orchestration/commands/orch-setup.md` | setup lane | **add** actor-print warning + reframe PAT bullet |
 | `README.md`, `plugins/orchestration/assets/CLAUDE.md` | docs | **reframe** PAT as runtime precondition + document escape hatch |
 
 ---
@@ -354,7 +354,10 @@ Expected: no output.
 
 ```bash
 git add plugins/orchestration/scripts/orchestration/heartbeat.sh tests/orchestration/heartbeat.bats
-git commit -m "feat(orch): gate heartbeat.sh on bot identity"
+git commit -m "feat(orch): gate heartbeat.sh on bot identity
+
+require_bot_actor runs after load_config, before the PATCH write, so a
+wrong-actor heartbeat aborts instead of refreshing the claim comment."
 ```
 
 ---
@@ -439,7 +442,10 @@ Expected: no output.
 
 ```bash
 git add plugins/orchestration/scripts/orchestration/reclaim.sh tests/orchestration/reclaim.bats
-git commit -m "feat(orch): gate reclaim.sh on bot identity"
+git commit -m "feat(orch): gate reclaim.sh on bot identity
+
+require_bot_actor runs after load_config, before the in-progress sweep's
+first write, so a wrong-actor reclaim aborts before reverting any lock."
 ```
 
 ---
@@ -524,11 +530,11 @@ For each issue labelled `status:qa`:
 with:
 
 ````markdown
-**Identity gate (run first, from the main repo root):**
+**Identity gate (run first, from the main repo root, before any `cd`):**
 ```bash
-source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh" && ORCH_CONFIG="$REPO_ROOT/.claude/orchestration.json" load_config && require_bot_actor || exit 1
+source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh" && load_config && require_bot_actor || exit 1
 ```
-If this fails, **stop** and export the bot PAT (`export GH_TOKEN=github_pat_...`).
+If this fails, **stop** and export the bot PAT (`export GH_TOKEN=github_pat_...`). (Plain `load_config` is correct here: the gate runs from the main repo root before this lane steps into any worktree, so `./.claude/orchestration.json` resolves — same preamble as the other three lanes.)
 
 For each issue labelled `status:qa`:
 ````
@@ -562,9 +568,9 @@ own bot writes. bootstrap-labels.sh stays ungated per spec (setup-time)."
 - Modify: `README.md` (post-setup checklist item 1)
 - Modify: `plugins/orchestration/assets/CLAUDE.md` (Merge gate section)
 
-- [ ] **Step 1: Add the actor-print warning to orch-setup.md**
+- [ ] **Step 1: Update orch-setup.md — actor-print warning + reframe the PAT bullet**
 
-Replace:
+First, add the actor-print warning to step 1. Replace:
 
 ```markdown
    command -v gh jq yq || { echo "missing prerequisite (need gh, jq, yq)"; exit 1; }
@@ -580,6 +586,18 @@ with:
    echo "ⓘ gh is currently acting as: ${actor:-<unknown>}"
    echo "  After creating the bot PAT, run lanes with:  export GH_TOKEN=github_pat_..."
    echo "  (must resolve to the bot account — NOT '${actor:-your personal login}')"
+```
+
+Then, in the **same file**, reframe the bot-PAT manual-steps bullet as a runtime precondition (spec §4.4 names both `README.md:80` **and** `orch-setup.md:44`). Replace:
+
+```markdown
+   - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh).
+```
+
+with:
+
+```markdown
+   - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh). **This is a runtime precondition, not a recommendation** — every lane verifies `gh` is acting as `config.bot` at startup and hard-stops on mismatch.
 ```
 
 - [ ] **Step 2: Reframe the PAT as a runtime precondition in README.md**
@@ -621,6 +639,7 @@ with:
 Run:
 ```bash
 grep -q 'gh is currently acting as' plugins/orchestration/commands/orch-setup.md \
+  && grep -q 'runtime precondition, not a recommendation' plugins/orchestration/commands/orch-setup.md \
   && grep -q '실행 전제조건' README.md \
   && grep -q 'ORCH_SKIP_ACTOR_CHECK' plugins/orchestration/assets/CLAUDE.md \
   && echo OK
@@ -681,7 +700,7 @@ This task adds no commit; it is the human-review checkpoint. A human reviews the
 - §4.2 engine call sites → Tasks 2–4; lane call sites → Task 5. ✓
 - §4.2.1 `WORKER_ID` → no code change required (informational; gate prevents new mismatched tokens). ✓
 - §4.3 `/orch-setup` warn + `bootstrap-labels.sh` ungated → Task 6 Step 1; Task 7 Step 4 asserts ungated. ✓
-- §4.4 docs (README, assets/CLAUDE.md) → Task 6 Steps 2–3. ✓
+- §4.4 docs — `README.md:80` → Task 6 Step 2; `orch-setup.md:44` PAT-bullet reframe → Task 6 Step 1; `assets/CLAUDE.md` → Task 6 Step 3. ✓
 - §6 testing: stub extension + lib.bats cases → Task 1; all three engine scripts gated+tested → Tasks 2–4. ✓
 - §7/§7.1 escape hatch, casing (no normalization applied → no action), pre-merge gate → Task 7. ✓
 
