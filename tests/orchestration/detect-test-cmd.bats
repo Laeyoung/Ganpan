@@ -3,7 +3,7 @@
 bats_require_minimum_version 1.5.0  # for `run --separate-stderr` in the last test
 
 setup() {
-  SCRIPT="$BATS_TEST_DIRNAME/../../scripts/orchestration/detect-test-cmd.sh"
+  SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/detect-test-cmd.sh"
   WORK="$BATS_TEST_TMPDIR/proj"; mkdir -p "$WORK"
   export ORCH_CONFIG="$WORK/.claude/orchestration.json"; mkdir -p "$WORK/.claude"
 }

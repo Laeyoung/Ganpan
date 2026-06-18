@@ -13,5 +13,5 @@ For each issue labelled `status:in-review` (find its PR via branch `issue-<n>` o
    ```bash
    gh pr view <pr> --json state,mergedAt --repo "$REPO"
    ```
-   When `mergedAt` is set: `gh issue edit <n> --add-label status:qa --remove-label status:in-review`; `project_sync <n> "QA"` (source lib.sh first); `git worktree remove "$WORKTREE_BASE/wt-issue-<n>"`.
+   When `mergedAt` is set: `gh issue edit <n> --add-label status:qa --remove-label status:in-review`; `project_sync <n> "QA"` (source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh" first; set ORCH_CONFIG to the main repo's .claude/orchestration.json if you are inside a worktree); `git worktree remove "$WORKTREE_BASE/wt-issue-<n>"`.
 3. **If changes are needed:** post `gh issue comment <n> --body "rework-requested: <reasons>"`, then `gh issue edit <n> --add-label status:in-progress --remove-label status:in-review`. **Keep the bot assignee and do NOT remove the worktree** — the Coder's resume path (work-issue step 1) picks it up. `project_sync <n> "In Progress"`.

@@ -7,7 +7,7 @@ source "$DIR/lib.sh"
 load_config
 
 kind="${1:?kind required: test|build|lint}"
-cfg="${ORCH_CONFIG:-$SCRIPT_DIR/../../.claude/orchestration.json}"
+cfg="${ORCH_CONFIG:-./.claude/orchestration.json}"
 
 # 1. config override
 override=$(jq -r --arg k "$kind" '.commands[$k] // empty' "$cfg")

@@ -8,7 +8,7 @@ export SCRIPT_DIR
 log() { printf '[%s] %s\n' "$1" "${*:2}" >&2; }
 
 load_config() {
-  local cfg="${ORCH_CONFIG:-$SCRIPT_DIR/../../.claude/orchestration.json}"
+  local cfg="${ORCH_CONFIG:-./.claude/orchestration.json}"
   if [ ! -f "$cfg" ]; then log ERROR "config not found: $cfg"; return 1; fi
   REPO=$(jq -er '.repo' "$cfg")                       || { log ERROR "config.repo missing"; return 1; }
   BOT=$(jq -er '.bot' "$cfg")                         || { log ERROR "config.bot missing"; return 1; }

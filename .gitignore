@@ -1,2 +1,5 @@
 # heartbeat pid files are written to $TMPDIR, but ignore strays just in case
 hb-*.pid
+
+# review-loop state files are machine-local bookkeeping (contain absolute paths) — never commit
+docs/reviews/*.state.json
