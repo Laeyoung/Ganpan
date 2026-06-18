@@ -12,6 +12,14 @@ echo "$*" >> "$GH_CALLS"
 if [ -n "${GH_FAIL_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_FAIL_MATCH"; then
   exit 1
 fi
+# `gh api user` (the actor-identity probe) — emit a configurable login WITHOUT
+# consuming a queued-response slot. Standalone case BEFORE the queue-emitting one;
+# 3-word expansion so "api user "* matches `gh api user --jq .login`.
+# `-` (not `:-`): GH_STUB_LOGIN set-but-empty yields an empty login, for the
+# "empty login" gate test.
+case "${1:-} ${2:-} ${3:-}" in
+  "api user "*) echo "${GH_STUB_LOGIN-bot-login}"; exit "${GH_EXIT:-0}" ;;
+esac
 case "${1:-} ${2:-}" in
   "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list")
     idx_file="$GH_RESPONSES/.idx"
