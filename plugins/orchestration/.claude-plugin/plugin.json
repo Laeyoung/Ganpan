@@ -1,0 +1,6 @@
+{
+  "name": "orchestration",
+  "version": "1.0.0",
+  "description": "GitHub-native agent orchestration: Triager/Coder/Reviewer/QA lanes over Issues/PRs/labels, plus /orch-setup.",
+  "author": { "name": "Laeyoung Chang" }
+}
