@@ -26,7 +26,7 @@ are automatic.
 ## Steps
 1. **Bot account + Fine-grained PAT.** Permissions on the target repo only: Contents RW, Pull requests RW, Issues RW, Projects RW. Expiry 90d. Export `GH_TOKEN=github_pat_...` (do not use `--with-token`). Use HTTPS (`gh auth` over ssh breaks fine-grained tokens).
 2. **Add the bot as a collaborator** on the target repo.
-3. **Config** is written by `/orch-setup` (plugin) or `install.sh` (copy-in). Set `repo`, `bot`, and (optionally) `project.number`.
+3. **Config:** `/orch-setup` (plugin) writes `.claude/orchestration.json` and fills `repo`/`bot` from its argument. `install.sh` (copy-in) only drops the **template** if absent — you must then manually edit `.claude/orchestration.json` to set `repo`, `bot`, and (optionally) `project.number`.
 4. **Labels** are bootstrapped by `/orch-setup`. For the copy-in path run `scripts/orchestration/bootstrap-labels.sh .github/labels.yml`.
 5. **(Optional) GitHub Project:** create it, set `project.number`; otherwise leave `null` (sync becomes a no-op).
 6. **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, no direct push, **include administrators**, restrict review dismissal. Bot token must **not** be admin.

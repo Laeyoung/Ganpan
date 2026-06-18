@@ -15,13 +15,28 @@
 
 set -euo pipefail
 
-SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN="$SRC/plugins/orchestration"
-VERSION=$(jq -r '.version' "$PLUGIN/.claude-plugin/plugin.json")
-SENTINEL_TOKEN="ganpan-orchestration: v$VERSION"
-
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 info() { printf '  %s\n' "$*"; }
+
+# sed_i <file> <sed-args…> — portable in-place edit. `sed -i ''` is BSD-only and
+# breaks on GNU/Linux (it consumes '' as the script); install.sh ships to users
+# who may be on Linux, so edit via a temp file instead.
+sed_i() {
+  local f="$1"; shift
+  local t; t="$(mktemp)"
+  if sed "$@" "$f" > "$t"; then mv "$t" "$f"; else rm -f "$t"; return 1; fi
+}
+
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN="$SRC/plugins/orchestration"
+
+# prerequisites (checked before any work; under `set -e` a missing jq or manifest
+# would otherwise abort with a cryptic message)
+command -v jq >/dev/null 2>&1 || die "jq is required but not found on PATH"
+[ -f "$PLUGIN/.claude-plugin/plugin.json" ] \
+  || die "plugin manifest not found: $PLUGIN/.claude-plugin/plugin.json — run install.sh from a ganpan checkout"
+VERSION=$(jq -r '.version' "$PLUGIN/.claude-plugin/plugin.json")
+SENTINEL_TOKEN="ganpan-orchestration: v$VERSION"
 
 # --- args ---------------------------------------------------------------------
 TARGET=""
@@ -52,13 +67,16 @@ mkdir -p "$TARGET/scripts/orchestration" "$TARGET/.claude/commands" "$TARGET/.gi
 [ -f "$TARGET/.github/labels.yml" ]             || cp "$PLUGIN/assets/labels.yml" "$TARGET/.github/labels.yml"
 [ -f "$TARGET/.github/ISSUE_TEMPLATE/task.yml" ] || cp "$PLUGIN/assets/task.yml" "$TARGET/.github/ISSUE_TEMPLATE/task.yml"
 [ -f "$TARGET/.claude/orchestration.json" ]     || cp "$PLUGIN/assets/orchestration.json" "$TARGET/.claude/orchestration.json"
-info ".github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, .claude/orchestration.json (if absent)"
+mkdir -p "$TARGET/docs"
+[ -f "$TARGET/docs/SETUP.md" ]                  || cp "$SRC/docs/SETUP.md" "$TARGET/docs/SETUP.md"
+info ".github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, .claude/orchestration.json, docs/SETUP.md (if absent)"
 
 # --- sentinel helpers ---------------------------------------------------------
 # stamp <file> — append the version sentinel as the last line, in the right comment syntax.
 stamp() {
-  local dest="$1"
-  sed -i '' "\|$SENTINEL_TOKEN|d" "$dest" 2>/dev/null || true   # drop any prior sentinel (| delimiter: robust to any version string)
+  local dest="$1" esc
+  esc="${SENTINEL_TOKEN//./\\.}"          # escape the version's dots (only BRE metachar in the token) → fixed-string match
+  sed_i "$dest" "\|$esc|d" || true        # drop any prior sentinel (| delimiter)
   case "$dest" in
     *.md) printf '\n<!-- %s -->\n' "$SENTINEL_TOKEN" >> "$dest" ;;
     *)    printf '\n# %s\n'        "$SENTINEL_TOKEN" >> "$dest" ;;
@@ -77,6 +95,7 @@ needs_write() {
 
 # --- 2. engine scripts --------------------------------------------------------
 for src in "$PLUGIN"/scripts/orchestration/*.sh; do
+  [ -e "$src" ] || die "no engine scripts at $PLUGIN/scripts/orchestration/ — incomplete checkout?"
   dest="$TARGET/scripts/orchestration/$(basename "$src")"
   needs_write "$dest" && { cp "$src" "$dest"; chmod +x "$dest"; stamp "$dest"; }
 done
@@ -86,11 +105,14 @@ info "scripts/orchestration/*.sh"
 for name in work-issue triage review-queue qa-check; do
   src="$PLUGIN/commands/$name.md"; dest="$TARGET/.claude/commands/$name.md"
   # shellcheck disable=SC2016  # ${CLAUDE_PLUGIN_ROOT} must not expand — it's a literal to strip
-  needs_write "$dest" && { cp "$src" "$dest"; sed -i '' 's|\${CLAUDE_PLUGIN_ROOT}/|./|g' "$dest"; stamp "$dest"; }
+  needs_write "$dest" && { cp "$src" "$dest"; sed_i "$dest" 's|\${CLAUDE_PLUGIN_ROOT}/|./|g'; stamp "$dest"; }
 done
 info ".claude/commands/{work-issue,triage,review-queue,qa-check}.md"
 
 # --- 4. CLAUDE.md (create or append conventions once) -------------------------
+# Note: CLAUDE.md is merge-managed (append-once under its own sentinel), NOT
+# version-stamped — `--force` deliberately does not rewrite it (spec §3.5); a
+# user editing conventions text upstream merges them manually.
 echo
 echo "Conventions (CLAUDE.md):"
 SENTINEL="<!-- orchestration-conventions -->"

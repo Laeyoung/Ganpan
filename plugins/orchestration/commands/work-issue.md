@@ -20,14 +20,16 @@ Do exactly this, stopping at the first step that says to stop:
 3. **Claim.** Run `ISSUE=$(${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/claim.sh)`. Exit 1 → queue empty, **stop**. Exit 2 → lost race, **stop** (next tick retries). Exit 0 → `ISSUE` holds the number; `git worktree add "$(jq -r .worktreeBaseDir .claude/orchestration.json)/wt-issue-$ISSUE" -b "issue-$ISSUE"`.
 4. **Heartbeat.** Before any step that may exceed the heartbeat interval (large test/build), start a background heartbeat and stop it after:
    ```bash
-   HB_MIN=$(jq -r .reclaim.heartbeatMinutes .claude/orchestration.json)
-   ( while sleep "$((HB_MIN*60))"; do ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/heartbeat.sh "$ISSUE"; done ) &
+   HB_MIN=$(jq -r .reclaim.heartbeatMinutes "$REPO_ROOT/.claude/orchestration.json")
+   # The heartbeat runs in the background and may fire while cwd is the worktree
+   # (no .claude/ there), so it MUST carry ORCH_CONFIG pointing at the main config.
+   ( while sleep "$((HB_MIN*60))"; do ORCH_CONFIG="$REPO_ROOT/.claude/orchestration.json" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/heartbeat.sh "$ISSUE"; done ) &
    echo $! > "${TMPDIR:-/tmp}/hb-$ISSUE.pid"
    # ... run the long command ...
    kill "$(cat "${TMPDIR:-/tmp}/hb-$ISSUE.pid")" 2>/dev/null || true
    ```
-   For short steps, just call `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/heartbeat.sh "$ISSUE"` between them.
-5. **Implement** inside `wt-issue-$ISSUE`: read the issue, make the change. Get test/build commands via `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/detect-test-cmd.sh test` and `... build`; run them and surface results.
+   For short steps, just call `ORCH_CONFIG="$REPO_ROOT/.claude/orchestration.json" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/heartbeat.sh "$ISSUE"` between them.
+5. **Implement** inside `wt-issue-$ISSUE`: read the issue, make the change. Get test/build commands via `ORCH_CONFIG="$REPO_ROOT/.claude/orchestration.json" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/detect-test-cmd.sh test` and `... build` — the `ORCH_CONFIG` prefix is **required** here because cwd is the worktree, which has no `.claude/` dir (same reason as step 8). Run them and surface results.
 6. **Commit** with Conventional Commits (see `CLAUDE.md`): `type(scope): subject`, body explains *what & why*, footer `Closes #$ISSUE`.
 7. **PR.** `gh pr create --head "issue-$ISSUE" --base main --title "..." --body "...\n\nCloses #$ISSUE"`. Add a comment to the issue linking the PR. (On resume, push to the existing PR instead.)
 8. **Project sync.** `source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh" && ORCH_CONFIG="$REPO_ROOT/.claude/orchestration.json" load_config && project_sync "$ISSUE" "In Review"`.
