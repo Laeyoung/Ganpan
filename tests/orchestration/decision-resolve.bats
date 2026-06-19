@@ -36,6 +36,12 @@ run_with() {
   [ "$(echo "$output" | jq -r .action)" = "clarify" ]
 }
 
+@test "null answers → clarify, exit 0" {
+  run_with '{"answers":null}'
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .action)" = "clarify" ]
+}
+
 @test "first-bucket adoption: earliest classifiable wins (unclassifiable does not occupy)" {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:01Z","bucket":"unclassifiable"},{"createdAt":"2026-01-01T00:00:02Z","bucket":"rework"}]}'
   [ "$(echo "$output" | jq -r .action)" = "rework" ]

@@ -16,7 +16,7 @@ if ! echo "$input" | jq -e '
 fi
 
 echo "$input" | jq -c '
-  ([.answers[] | select(.bucket != "unclassifiable")] | sort_by(.createdAt)) as $c
+  ([.answers[]? | select(.bucket != "unclassifiable")] | sort_by(.createdAt)) as $c
   | if ($c | length) == 0 then
       {action:"clarify", reason:"no-classifiable-answer"}
     else
