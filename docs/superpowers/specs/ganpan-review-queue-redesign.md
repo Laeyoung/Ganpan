@@ -121,7 +121,7 @@ Reviewer는 자체 리뷰 + 새 신뢰 사람 입력을 종합해 **다음 4개 
 ## 7. 상태머신 변경
 
 - **신규 라벨:** `status:needs-decision` — "리뷰어가 사람 결정을 요청, PR은 in-review 유지".
-- **신규 마커(봇 작성):** `decision-requested:` / `decision-resolved:` / `decision-clarify:` / `followup-created:` / `merge-requested:` / `cap-exceeded:`.
+- **신규 마커(봇 작성):** `decision-requested:` / `decision-resolved:` / `decision-clarify:` / `followup-created:` / `merge-requested:` / `merge-resolved:` / `cap-exceeded:`.
 - **전이:**
   - `in-review` → (R-A) → `in-progress`  *(기존 rework 경로 재사용)*
   - `in-review` → (R-B) → `in-review` + `needs-decision`  *(HEAD SHA 기록)*
@@ -216,3 +216,29 @@ followup-created: comment-12345 → #42   (항목키 → 생성된 이슈)
 merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님).
 cap-exceeded: PR당 후속 이슈 상한 도달 — 이 항목은 자동 생성하지 않았습니다(수동 생성 필요).
 ```
+
+---
+
+## 부록 B. AC → 구현 추적 (Implementation traceability)
+
+| AC | 구현 위치 |
+|---|---|
+| AC1, AC13, AC22 | `lib.sh:is_trusted` + `trusted-answers.sh` (trust filter at conversion time) |
+| AC19 | `lib.sh:is_trusted` at conversion time — **partial** (rejects a user who lost access; does not reconstruct a full continuous-trust window — see Task 6 "Known approximation", §10.1) |
+| AC2 | review-queue.md R-A (rework path, worktree/assignee preserved) |
+| AC3 | review-queue.md R-B (decision gate, no merge request) |
+| AC4 | `trusted-answers.sh` (no new trusted input → empty → no-op) |
+| AC5, AC18 | `decision-resolve.sh` (classify → action) + review-queue.md Step D branches 2–4 (rework→R-A, proceed→R-D, followup→R-C→R-D) and Step D.6 / R-B-clarify (clarify → `decision-clarify:`, hold gate) |
+| AC6 | review-queue.md R-C (`gh issue create --label status:blocked`) |
+| AC7 | review-queue.md R-D (merge poll → status:qa → project_sync → worktree remove) |
+| AC8, AC16, AC21 | `followup-dedup.sh` (item-key dedup, cap, cap-noted) |
+| AC9, AC20 | review-queue.md Step E (HEAD SHA compare, new-commit precedence) |
+| AC10 | review-queue.md Step D priority (R-A over R-B) |
+| AC11 | review-queue.md R-D + `bot_marker_pending("merge-requested:")` |
+| AC12 | review-queue.md Step F (external termination) |
+| AC14, AC26 | review-queue.md Step C (per-answer isolation, schema-bound) + `decision-resolve.sh` schema-violation → clarify backstop |
+| AC15 | review-queue.md Step F (reopen trust check) |
+| AC17, AC23 | review-queue.md Step F (manual label hygiene) |
+| AC24 | review-queue.md Step D.6 (clarify, no auto-adopt) |
+| AC25 | review-queue.md R-A (`merge-resolved: superseded-by-rework`) |
+| AC27 | review-queue.md Step C (edited → unclassifiable) |
