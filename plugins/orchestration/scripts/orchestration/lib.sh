@@ -53,3 +53,25 @@ project_sync() {
     | jq -er --argjson num "$issue" '.items[] | select(.content.number==$num) | .id')
   gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id"
 }
+
+# perm_rank <permission> — comparable rank; unknown/none == -1 (never trusted).
+perm_rank() {
+  case "$1" in
+    admin) echo 4 ;; maintain) echo 3 ;; write) echo 2 ;;
+    triage) echo 1 ;; read|pull) echo 0 ;; *) echo -1 ;;
+  esac
+}
+
+# is_trusted <login> — exit 0 if trusted, 1 otherwise. Allowlist OR permission threshold.
+# Queried at call time (== conversion time) so a user who lost access is no longer trusted.
+is_trusted() {
+  local user="$1"
+  if [ -n "${REVIEWER_ALLOWLIST:-}" ] && printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qxF -- "$user"; then
+    return 0
+  fi
+  local perm have need
+  perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 1
+  have=$(perm_rank "$perm")
+  need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
+  [ "$have" -ge 0 ] && [ "$have" -ge "$need" ]
+}

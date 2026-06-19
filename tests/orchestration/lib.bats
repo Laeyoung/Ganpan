@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
 
 setup() {
+  load helpers/common
+  setup_gh_stub
   LIB="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/lib.sh"
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   cat > "$ORCH_CONFIG" <<'JSON'
@@ -72,4 +74,42 @@ JSON
   run bash -c 'source "$0"; load_config; printf "%s|%s|[%s]" "$REVIEWER_PERM_THRESHOLD" "$FOLLOWUP_CAP" "$REVIEWER_ALLOWLIST"' "$LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "write|3|[]" ]
+}
+
+@test "perm_rank orders permissions" {
+  run bash -c 'source "$0"
+    [ "$(perm_rank admin)" -eq 4 ] && [ "$(perm_rank maintain)" -eq 3 ] \
+    && [ "$(perm_rank write)" -eq 2 ] && [ "$(perm_rank read)" -eq 0 ] \
+    && [ "$(perm_rank pull)" -eq 0 ] && [ "$(perm_rank none)" -eq -1 ] \
+    && [ "$(perm_rank bogus)" -eq -1 ]' "$LIB"
+  [ "$status" -eq 0 ]
+}
+
+@test "is_trusted: allowlist match short-circuits (no API call)" {
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":["carol"],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  run bash -c 'source "$0"; load_config; is_trusted carol' "$LIB"
+  [ "$status" -eq 0 ]
+  ! grep -q 'api repos/o/r/collaborators/carol' "$GH_CALLS"
+}
+
+@test "is_trusted: write permission passes threshold" {
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  queue_response 'write'
+  run bash -c 'source "$0"; load_config; is_trusted dave' "$LIB"
+  [ "$status" -eq 0 ]
+  grep -q 'api repos/o/r/collaborators/dave/permission' "$GH_CALLS"
+}
+
+@test "is_trusted: read permission fails threshold" {
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  queue_response 'read'
+  run bash -c 'source "$0"; load_config; is_trusted eve' "$LIB"
+  [ "$status" -eq 1 ]
+}
+
+@test "is_trusted: API failure is untrusted" {
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  export GH_FAIL_MATCH='collaborators'
+  run bash -c 'source "$0"; load_config; is_trusted mallory' "$LIB"
+  [ "$status" -eq 1 ]
 }
