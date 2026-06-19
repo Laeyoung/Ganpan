@@ -24,6 +24,7 @@ status:qa          ── /qa-check ──▶ status:done   (실패 시 rework /
 | **Reviewer** | `/ganpan:review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
 | **QA** | `/ganpan:qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
 | **Setup** | `/ganpan:orch-setup` | 1회 셋업 (아래 참고) |
+| **통합 런처** | `/ganpan:run-all` | 4개 레인(Triager·Coder·Reviewer·QA)을 백그라운드 에이전트로 한 번에 병렬 1회 스윕 |
 
 > 플러그인 커맨드는 플러그인 이름으로 네임스페이싱됩니다. 정식 호출은 `/ganpan:triage`이며, 충돌이 없으면 짧은 `/triage`로도 호출됩니다.
 
@@ -94,6 +95,16 @@ Reviewer:  /loop 5m /ganpan:review-queue
 QA      :  /goal 로 /ganpan:qa-check 래핑
 ```
 
+### 한 번에 실행 (통합 런처)
+
+`claude agents`(Agent View) 한 곳에서 4개 레인을 운영하려면:
+
+```text
+/loop 20m /ganpan:run-all      # 20m은 예시 — 조정 가능. bare 실행 시 1회 스윕
+```
+
+`/ganpan:run-all`은 매 틱마다 4개 레인을 **백그라운드 에이전트**로 띄워 각자 1회 스윕 후 종료합니다(Agent View에 함께 표시). 단일 인스턴스만 권장(2개 동시 실행 시 worker pool·WIP 압력 2배). Coder는 틱당 최대 3 사이클이라, **백로그가 깊으면** 전용 `/loop /ganpan:work-issue`를 함께 돌리세요.
+
 ### 통합 스모크 테스트 (수동)
 
 1. 이슈를 연다 → `status:triage` 부여됨.
@@ -135,7 +146,7 @@ QA      :  /goal 로 /ganpan:qa-check 래핑
 .claude-plugin/marketplace.json          # 마켓플레이스 매니페스트 (name: laeyoung)
 plugins/orchestration/
   ├─ .claude-plugin/plugin.json          # 플러그인 매니페스트 (name: ganpan)
-  ├─ commands/                           # 레인 커맨드 (triage / work-issue / ...)
+  ├─ commands/                           # 레인 커맨드 (triage / work-issue / ... / run-all)
   ├─ scripts/orchestration/              # 엔진 셸 스크립트 (claim, reclaim, lib, ...)
   └─ assets/                             # config 템플릿, labels.yml, 이슈 템플릿, CLAUDE.md
 install.sh                               # copy-in 설치/업그레이드

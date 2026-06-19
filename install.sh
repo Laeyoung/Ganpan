@@ -102,12 +102,12 @@ done
 info "scripts/orchestration/*.sh"
 
 # --- 3. lane commands (rewrite \${CLAUDE_PLUGIN_ROOT}/ -> ./ between copy and stamp; orch-setup.md excluded) ---
-for name in work-issue triage review-queue qa-check; do
+for name in work-issue triage review-queue qa-check run-all; do
   src="$PLUGIN/commands/$name.md"; dest="$TARGET/.claude/commands/$name.md"
   # shellcheck disable=SC2016  # ${CLAUDE_PLUGIN_ROOT} must not expand — it's a literal to strip
   needs_write "$dest" && { cp "$src" "$dest"; sed_i "$dest" 's|\${CLAUDE_PLUGIN_ROOT}/|./|g'; stamp "$dest"; }
 done
-info ".claude/commands/{work-issue,triage,review-queue,qa-check}.md"
+info ".claude/commands/{work-issue,triage,review-queue,qa-check,run-all}.md"
 
 # --- 4. CLAUDE.md (create or append conventions once) -------------------------
 # Note: CLAUDE.md is merge-managed (append-once under its own sentinel), NOT
@@ -138,4 +138,5 @@ Done. Next steps (details in $TARGET/docs/SETUP.md):
        cd "$TARGET" && scripts/orchestration/bootstrap-labels.sh .github/labels.yml
   4. Branch protection on main         → require 1 human review; bot is NOT admin
   5. Run lanes:  /loop /work-issue · /loop 10m /triage · /loop 5m /review-queue · /qa-check
+       or all at once:  /loop 20m /run-all   (20m is an adjustable example)
 EOF

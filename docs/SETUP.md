@@ -39,6 +39,20 @@ are automatic.
 - Reviewer:`/loop 5m /review-queue`
 - QA:      `/goal` wrapping `/qa-check` (see `.claude/commands/qa-check.md`)
 
+### Running all lanes at once
+`/run-all` (`/ganpan:run-all` under a plugin install) is a fan-out launcher: each
+run spawns the four lanes as **background agents** (visible in `claude agents` /
+Agent View), each doing one bounded sweep then exiting. Wrap it in the scheduler
+for continuous operation — `/loop 20m /run-all` (the interval is an adjustable
+example; run bare for a single sweep).
+
+- **Single-cadence trade-off.** One outer interval flattens the per-lane cadences
+  (Triager 10m / Reviewer 5m / Coder self-paced). Coder loses the most — at most 3
+  issues per tick; for a deep backlog keep a dedicated `/loop /work-issue` running
+  alongside `/run-all`.
+- **Run one instance.** Two concurrent `/loop … /run-all` double the worker pool —
+  safe (the engine tolerates N racing workers) but double the WIP pressure.
+
 ## Integration smoke test (manual)
 1. Open an issue (gets `status:triage`).
 2. Run `/triage` once → issue becomes `status:agent-ready`.
