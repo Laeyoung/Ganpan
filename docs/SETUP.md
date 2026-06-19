@@ -48,8 +48,8 @@ example; run bare for a single sweep).
 
 - **Single-cadence trade-off.** One outer interval flattens the per-lane cadences
   (Triager 10m / Reviewer 5m / Coder self-paced). Coder loses the most — at most 3
-  issues per tick; for a deep backlog keep a dedicated `/loop /work-issue` running
-  alongside `/run-all`.
+  cycles per tick (one issue each); for a deep backlog keep a dedicated
+  `/loop /work-issue` running alongside `/run-all`.
 - **Run one instance.** Two concurrent `/loop … /run-all` double the worker pool —
   safe (the engine tolerates N racing workers) but double the WIP pressure.
 
