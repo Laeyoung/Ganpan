@@ -113,5 +113,6 @@ setup() {
   queue_response '[]'
   run bash "$SCRIPT"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted
   ! grep -q 'issue edit' "$GH_CALLS"
 }

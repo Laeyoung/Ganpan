@@ -133,6 +133,20 @@ setup() {
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
   run bash "$SCRIPT"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted
   ! grep -q 'issue edit' "$GH_CALLS"
   ! grep -q 'issue comment' "$GH_CALLS"
+}
+
+# Engine-level coverage of the gate's gh-api-failure branch. The gate is the
+# first gh call, so the script aborts here before reaching any other gh call —
+# representative for all three engine scripts (identical `require_bot_actor || exit 1` wiring).
+@test "unresolvable gh identity → aborts before any write" {
+  export GH_STUB_LOGIN=botx
+  export GH_EXIT=1                                                # `gh api user` exits non-zero
+  queue_response '[{"number":42,"createdAt":"2026-01-01T00:00:00Z"}]'   # never consumed — gate aborts first
+  run bash "$SCRIPT"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"cannot resolve gh identity"* ]]
+  ! grep -q 'issue edit' "$GH_CALLS"
 }

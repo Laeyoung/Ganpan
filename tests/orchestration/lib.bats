@@ -77,6 +77,14 @@ JSON
   [[ "$output" == *"empty login"* ]]
 }
 
+@test "require_bot_actor fails when gh api user errors (unresolvable identity)" {
+  export GH_STUB_LOGIN=botx
+  export GH_EXIT=1
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"cannot resolve gh identity"* ]]
+}
+
 @test "ORCH_SKIP_ACTOR_CHECK=1 short-circuits without calling gh" {
   export ORCH_SKIP_ACTOR_CHECK=1
   export GH_STUB_LOGIN=intruder

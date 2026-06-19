@@ -29,7 +29,7 @@ load_config() {
 # Escape hatch: ORCH_SKIP_ACTOR_CHECK=1 (e.g. CI where the bot PAT *is* the actor).
 # Must be set per-invocation, never exported globally.
 require_bot_actor() {
-  [ "${ORCH_SKIP_ACTOR_CHECK:-}" = "1" ] && return 0
+  [ "${ORCH_SKIP_ACTOR_CHECK:-}" = "1" ] && { log WARN "ORCH_SKIP_ACTOR_CHECK=1 — actor identity gate bypassed"; return 0; }
   # jq -er in load_config rejects null but NOT an empty JSON string, so config.bot=""
   # yields BOT=""; without this guard an empty actor would compare equal and pass.
   [ -n "$BOT" ] || { log ERROR "config.bot is empty"; return 1; }

@@ -41,5 +41,6 @@ setup() {
   queue_response '{"comments":[{"id":555,"author":{"login":"botx"},"body":"claim: old-token"}]}'  # would be PATCHed without the gate
   run bash "$SCRIPT" 42
   [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted
   ! grep -q 'api --method PATCH' "$GH_CALLS"
 }
