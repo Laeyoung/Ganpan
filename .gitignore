@@ -3,3 +3,4 @@ hb-*.pid
 
 # review-loop state files are machine-local bookkeeping (contain absolute paths) — never commit
 docs/reviews/*.state.json
+docs/qa/*.state.json
