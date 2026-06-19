@@ -113,3 +113,28 @@ JSON
   run bash -c 'source "$0"; load_config; is_trusted mallory' "$LIB"
   [ "$status" -eq 1 ]
 }
+
+@test "bot_marker_pending: open marker with no resolve → yes" {
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = "yes" ]
+}
+
+@test "bot_marker_pending: resolve after open → no" {
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"},{"author":{"login":"botx"},"body":"decision-resolved: done"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$output" = "no" ]
+}
+
+@test "bot_marker_pending: non-bot marker ignored → no" {
+  printf '%s' '{"comments":[{"author":{"login":"attacker"},"body":"decision-requested: head=abc :: q"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$output" = "no" ]
+}
+
+@test "bot_marker_pending: no markers → no" {
+  printf '%s' '{"comments":[]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "merge-requested:" "merge-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$output" = "no" ]
+}

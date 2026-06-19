@@ -75,3 +75,13 @@ is_trusted() {
   need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
   [ "$have" -ge 0 ] && [ "$have" -ge "$need" ]
 }
+
+# bot_marker_pending <openPrefix> <resolvePrefix> — reads a {comments:[...]} JSON on
+# stdin; prints "yes" if the LATEST bot marker matching either prefix is an open one.
+bot_marker_pending() {
+  local open="$1" resolve="$2"
+  jq -r --arg b "$BOT" --arg o "$open" --arg r "$resolve" '
+    [.comments[] | select(.author.login==$b and ((.body|startswith($o)) or (.body|startswith($r))))] as $m
+    | if ($m|length)==0 then "no"
+      else (if ($m[-1].body|startswith($o)) then "yes" else "no" end) end'
+}
