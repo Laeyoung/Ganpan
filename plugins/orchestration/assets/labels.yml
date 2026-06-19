@@ -19,3 +19,6 @@
 - name: "status:blocked"
   color: "b60205"
   description: "사람 개입 필요"
+- name: "status:needs-decision"
+  color: "d4c5f9"
+  description: "리뷰어가 사람 결정 요청 (PR은 in-review 유지)"
