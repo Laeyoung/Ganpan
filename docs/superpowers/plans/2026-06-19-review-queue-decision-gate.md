@@ -56,6 +56,7 @@
 - `followup-created: <itemKey> → #<n>`
 - `cap-exceeded: <itemKey> | <note>`
 - `merge-requested: <note>`
+- `merge-resolved: <reason>`  (plan-introduced close-half so `bot_marker_pending` can detect a *superseded* merge request on rework re-entry — AC25; Task 9 also adds it to spec §7's marker list)
 - `rework-requested: <reasons>` (existing; unchanged)
 
 `<itemKey>` is a stable, space-free token, preferably `comment-<id>` of the originating trusted comment.
@@ -140,12 +141,11 @@ Append to `tests/orchestration/lib.bats`:
  "worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},
  "reviewer":{"permissionThreshold":"write","allowlist":["alice","bob"],"followupIssueCapPerPR":3}}
 JSON
-  source "$LIB"
-  load_config
-  [ "$REVIEWER_PERM_THRESHOLD" = "write" ]
-  [ "$FOLLOWUP_CAP" = "3" ]
-  printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qx alice
-  printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qx bob
+  run bash -c 'source "$0"; load_config; printf "%s|%s|%s" "$REVIEWER_PERM_THRESHOLD" "$FOLLOWUP_CAP" "$REVIEWER_ALLOWLIST"' "$LIB"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "write|3|"* ]]
+  [[ "$output" == *alice* ]]
+  [[ "$output" == *bob* ]]
 }
 
 @test "load_config reviewer.* falls back to defaults when block absent" {
@@ -155,19 +155,13 @@ JSON
  "commands":{"test":null,"build":null,"lint":null},
  "worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}
 JSON
-  source "$LIB"
-  load_config
-  [ "$REVIEWER_PERM_THRESHOLD" = "write" ]
-  [ "$FOLLOWUP_CAP" = "3" ]
-  [ -z "$REVIEWER_ALLOWLIST" ]
+  run bash -c 'source "$0"; load_config; printf "%s|%s|[%s]" "$REVIEWER_PERM_THRESHOLD" "$FOLLOWUP_CAP" "$REVIEWER_ALLOWLIST"' "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "write|3|[]" ]
 }
 ```
 
-If `lib.bats` does not already define `$LIB`, add to its `setup()`:
-```bash
-LIB="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/lib.sh"
-export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
-```
+`lib.bats` already defines `$LIB` and exports `$ORCH_CONFIG` in `setup()`; Task 3 additionally adds `load helpers/common` + `setup_gh_stub` there. No further setup change is needed for these two tests (they make no gh calls).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -226,7 +220,8 @@ git commit -m "feat(orch): add reviewer trust/cap config block and lib exports"
 
 **Files:**
 - Modify: `plugins/orchestration/scripts/orchestration/lib.sh` (append two functions before the final EOF)
-- Test: `tests/orchestration/lib.bats` (extend)
+- Modify: `tests/orchestration/helpers/gh-stub.sh` (let read-style `gh api` GETs emit a queued response)
+- Modify: `tests/orchestration/lib.bats` (`setup()` must enable the gh stub; add tests)
 
 **Interfaces:**
 - Consumes: `REPO`, `REVIEWER_PERM_THRESHOLD`, `REVIEWER_ALLOWLIST` (from Task 2); `gh`.
@@ -234,62 +229,87 @@ git commit -m "feat(orch): add reviewer trust/cap config block and lib exports"
   - `perm_rank <perm>` → prints integer: `admin`=4, `maintain`=3, `write`=2, `triage`=1, `read`/`pull`=0, anything else=`-1`.
   - `is_trusted <login>` → exit `0` if trusted, `1` otherwise. Allowlist match short-circuits without an API call; otherwise queries `gh api repos/$REPO/collaborators/<login>/permission`. A failed/`unknown` lookup is **untrusted** (exit 1).
 
-- [ ] **Step 1: Write the failing tests**
+> **Why the harness change:** `tests/orchestration/helpers/gh-stub.sh` currently emits queued responses only for `issue list|issue view|pr view|pr list|project …` and *deliberately* excludes `gh api` (it was previously only used for WRITE calls — PATCH/DELETE — which must not consume a response slot). `is_trusted` introduces the first **read** `gh api` (GET), and Task 6 adds more, so the stub must emit for read-`api` while still ignoring write-`api`. The existing write-`api` tests (`claim.bats`, `heartbeat.bats`) keep passing because the new branch only triggers when no write method (`-X`/`--method` POST/PUT/PATCH/DELETE) is present.
 
-Append to `tests/orchestration/lib.bats`:
+- [ ] **Step 1: Extend the test harness for read-style `gh api`**
+
+In `tests/orchestration/helpers/gh-stub.sh`, immediately **before** the existing `case "${1:-} ${2:-}" in` line, insert:
+
+```bash
+# Read-style `gh api` (GET): emit the next queued response. Write `api` (-X/--method
+# POST|PUT|PATCH|DELETE) is left to fall through and must NOT consume a slot.
+if [ "${1:-}" = "api" ] && ! printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](POST|PUT|PATCH|DELETE)'; then
+  idx_file="$GH_RESPONSES/.idx"
+  n=$(( $(cat "$idx_file" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$idx_file"
+  [ -f "$GH_RESPONSES/$n" ] && cat "$GH_RESPONSES/$n" || true
+  exit "${GH_EXIT:-0}"
+fi
+```
+
+In `tests/orchestration/lib.bats`, change `setup()` to enable the stub (it currently does not). Make the first two lines of `setup()`:
+
+```bash
+setup() {
+  load helpers/common
+  setup_gh_stub
+  LIB="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/lib.sh"
+  export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
+  # (existing default-config heredoc stays below)
+```
+
+This is a **prepend only**: keep the existing `LIB=` / `export ORCH_CONFIG=` lines and the default-config heredoc that follows them in the real `setup()` — add just the two new lines (`load helpers/common` + `setup_gh_stub`) at the top. The pre-existing `lib.bats` tests still rely on that default heredoc.
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `tests/orchestration/lib.bats`. Tests run lib.sh in a `bash -c` subshell (not sourced into the bats shell) so `set -euo pipefail` from lib.sh can't abort the test process — matching the existing `load_config` tests:
 
 ```bash
 @test "perm_rank orders permissions" {
-  source "$LIB"
-  [ "$(perm_rank admin)" -eq 4 ]
-  [ "$(perm_rank maintain)" -eq 3 ]
-  [ "$(perm_rank write)" -eq 2 ]
-  [ "$(perm_rank read)" -eq 0 ]
-  [ "$(perm_rank pull)" -eq 0 ]
-  [ "$(perm_rank none)" -eq -1 ]
-  [ "$(perm_rank bogus)" -eq -1 ]
+  run bash -c 'source "$0"
+    [ "$(perm_rank admin)" -eq 4 ] && [ "$(perm_rank maintain)" -eq 3 ] \
+    && [ "$(perm_rank write)" -eq 2 ] && [ "$(perm_rank read)" -eq 0 ] \
+    && [ "$(perm_rank pull)" -eq 0 ] && [ "$(perm_rank none)" -eq -1 ] \
+    && [ "$(perm_rank bogus)" -eq -1 ]' "$LIB"
+  [ "$status" -eq 0 ]
 }
 
 @test "is_trusted: allowlist match short-circuits (no API call)" {
-  printf '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":["carol"],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
-  source "$LIB"; load_config
-  run is_trusted carol
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":["carol"],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  run bash -c 'source "$0"; load_config; is_trusted carol' "$LIB"
   [ "$status" -eq 0 ]
   ! grep -q 'api repos/o/r/collaborators/carol' "$GH_CALLS"
 }
 
 @test "is_trusted: write permission passes threshold" {
-  printf '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
-  source "$LIB"; load_config
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
   queue_response 'write'
-  run is_trusted dave
+  run bash -c 'source "$0"; load_config; is_trusted dave' "$LIB"
   [ "$status" -eq 0 ]
   grep -q 'api repos/o/r/collaborators/dave/permission' "$GH_CALLS"
 }
 
 @test "is_trusted: read permission fails threshold" {
-  printf '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
-  source "$LIB"; load_config
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
   queue_response 'read'
-  run is_trusted eve
+  run bash -c 'source "$0"; load_config; is_trusted eve' "$LIB"
   [ "$status" -eq 1 ]
 }
 
 @test "is_trusted: API failure is untrusted" {
-  printf '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
-  source "$LIB"; load_config
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
   export GH_FAIL_MATCH='collaborators'
-  run is_trusted mallory
+  run bash -c 'source "$0"; load_config; is_trusted mallory' "$LIB"
   [ "$status" -eq 1 ]
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 3: Run tests to verify they fail**
 
 Run: `bats tests/orchestration/lib.bats -f 'perm_rank|is_trusted'`
-Expected: FAIL — `perm_rank: command not found`.
+Expected: FAIL — `perm_rank: command not found` / `is_trusted: command not found`.
 
-- [ ] **Step 3: Implement the functions**
+- [ ] **Step 4: Implement the functions**
 
 Append to `plugins/orchestration/scripts/orchestration/lib.sh` (before EOF):
 
@@ -317,20 +337,20 @@ is_trusted() {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 5: Run tests to verify they pass (and no regression)**
 
-Run: `bats tests/orchestration/lib.bats`
-Expected: PASS.
+Run: `bats tests/orchestration/lib.bats tests/orchestration/claim.bats tests/orchestration/heartbeat.bats`
+Expected: PASS — including the existing claim/heartbeat tests, confirming the read-`api` stub branch did not desync write-`api` calls.
 
-- [ ] **Step 5: Lint**
+- [ ] **Step 6: Lint**
 
 Run: `shellcheck plugins/orchestration/scripts/orchestration/lib.sh`
 Expected: no output (clean).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add plugins/orchestration/scripts/orchestration/lib.sh tests/orchestration/lib.bats
+git add plugins/orchestration/scripts/orchestration/lib.sh tests/orchestration/helpers/gh-stub.sh tests/orchestration/lib.bats
 git commit -m "feat(orch): add perm_rank and is_trusted trust-gating helpers"
 ```
 
@@ -348,33 +368,31 @@ git commit -m "feat(orch): add perm_rank and is_trusted trust-gating helpers"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/orchestration/lib.bats`:
+Append to `tests/orchestration/lib.bats`. `bot_marker_pending` reads stdin, so each test writes the JSON to a temp file and feeds it via redirection inside a single `run bash -c` (never pipe into `run` — that runs in a subshell and `$output`/`$status` would not reach the test scope):
 
 ```bash
 @test "bot_marker_pending: open marker with no resolve → yes" {
-  source "$LIB"; BOT=botx
-  echo '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"}]}' \
-    | { run bot_marker_pending "decision-requested:" "decision-resolved:"; }
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$status" -eq 0 ]
   [ "$output" = "yes" ]
 }
 
 @test "bot_marker_pending: resolve after open → no" {
-  source "$LIB"; BOT=botx
-  echo '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"},{"author":{"login":"botx"},"body":"decision-resolved: done"}]}' \
-    | { run bot_marker_pending "decision-requested:" "decision-resolved:"; }
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"},{"author":{"login":"botx"},"body":"decision-resolved: done"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
   [ "$output" = "no" ]
 }
 
 @test "bot_marker_pending: non-bot marker ignored → no" {
-  source "$LIB"; BOT=botx
-  echo '{"comments":[{"author":{"login":"attacker"},"body":"decision-requested: head=abc :: q"}]}' \
-    | { run bot_marker_pending "decision-requested:" "decision-resolved:"; }
+  printf '%s' '{"comments":[{"author":{"login":"attacker"},"body":"decision-requested: head=abc :: q"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
   [ "$output" = "no" ]
 }
 
 @test "bot_marker_pending: no markers → no" {
-  source "$LIB"; BOT=botx
-  echo '{"comments":[]}' | { run bot_marker_pending "merge-requested:" "merge-resolved:"; }
+  printf '%s' '{"comments":[]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "merge-requested:" "merge-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
   [ "$output" = "no" ]
 }
 ```
@@ -422,11 +440,12 @@ git commit -m "feat(orch): add bot_marker_pending idempotency primitive"
 
 **Interfaces:**
 - Consumes: a JSON object on stdin: `{"answers":[{"createdAt":"<ISO8601Z>","bucket":"rework|proceed|followup|unclassifiable"}, ...]}`. The agent (Task 9) produces this after classifying each *new trusted* answer from Task 6's output; `unclassifiable` covers edited answers, out-of-schema classifier output, and genuinely ambiguous replies, so they never occupy a bucket.
-- Produces: prints a JSON object `{"action":"rework|proceed|followup|clarify","reason":"<str>"}`. Exit `0` on success, `2` on malformed input (any bucket outside the allowed set). Logic (§5.5):
+- Produces: prints a JSON object `{"action":"rework|proceed|followup|clarify","reason":"<str>"}` and exits `0`. Logic (§5.5):
   - classifiable = answers with `bucket != "unclassifiable"`, sorted ascending by `createdAt`.
   - none classifiable → `clarify` / `no-classifiable-answer`.
   - all classifiable share the first bucket → that bucket (`rework`/`proceed`/`followup`) / `first-bucket`.
   - any classifiable differs from the first → `clarify` / `conflict`.
+  - any bucket outside the allowed set → `clarify` / `schema-violation` (out-of-schema classifier output must route to clarify, **not** crash the lane — §5.5/AC26). Only an unparseable-JSON stdin causes a nonzero exit (via `set -o pipefail`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -437,7 +456,12 @@ setup() {
   SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/decision-resolve.sh"
 }
 
-run_with() { printf '%s' "$1" | run bash "$SCRIPT"; }
+# Feed stdin via a temp file + redirection — never pipe into `run` (that runs in a
+# subshell and bats would not capture $status/$output).
+run_with() {
+  printf '%s' "$1" > "$BATS_TEST_TMPDIR/in.json"
+  run bash "$SCRIPT" < "$BATS_TEST_TMPDIR/in.json"
+}
 
 @test "single rework → action rework" {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:00Z","bucket":"rework"}]}'
@@ -487,9 +511,11 @@ run_with() { printf '%s' "$1" | run bash "$SCRIPT"; }
   [ "$(echo "$output" | jq -r .reason)" = "conflict" ]
 }
 
-@test "malformed bucket → exit 2" {
+@test "malformed bucket → clarify/schema-violation, exit 0" {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:01Z","bucket":"bogus"}]}'
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .action)" = "clarify" ]
+  [ "$(echo "$output" | jq -r .reason)" = "schema-violation" ]
 }
 ```
 
@@ -507,16 +533,17 @@ Create `plugins/orchestration/scripts/orchestration/decision-resolve.sh`:
 # decision-resolve.sh — pure routing decision from classified trusted answers.
 # stdin: {"answers":[{"createdAt":"<ISO8601Z>","bucket":"rework|proceed|followup|unclassifiable"}]}
 # stdout: {"action":"rework|proceed|followup|clarify","reason":"..."}
-# exit: 0 ok | 2 malformed bucket
+# exit: 0 always (out-of-schema → clarify; only unparseable JSON exits nonzero via pipefail)
 set -euo pipefail
 
 input=$(cat)
 
-# Validate every bucket up front; bail with exit 2 on any out-of-schema value.
+# Out-of-schema bucket (classifier error) → route to clarify, never crash the lane (AC26).
+# `if ! ... ; then` disables set -e for this pipeline; `jq -e` exits 1 when the test is false.
 if ! echo "$input" | jq -e '
-  all(.answers[]?; .bucket | IN("rework","proceed","followup","unclassifiable"))' >/dev/null; then
-  echo "decision-resolve: malformed bucket" >&2
-  exit 2
+  all(.answers[]?; .bucket | IN("rework","proceed","followup","unclassifiable"))' >/dev/null 2>&1; then
+  printf '%s\n' '{"action":"clarify","reason":"schema-violation"}'
+  exit 0
 fi
 
 echo "$input" | jq -c '
@@ -565,13 +592,15 @@ git commit -m "feat(orch): add decision-resolve.sh answer adoption/conflict core
 **Interfaces:**
 - Consumes: `is_trusted`, `load_config`, `BOT`, `REPO` (lib.sh from Tasks 2–3); `gh api`. Args: `<issue#> <pr#>`.
 - Produces: prints a JSON array to stdout. Each element: `{"id":<int>,"author":"<login>","createdAt":"<ISO8601Z>","edited":<bool>,"body":"<str>","source":"issue|pr"}`. Contents:
-  - cutoff = `created_at` of the **latest bot** comment on the issue whose body starts with `decision-requested:` or `decision-clarify:` (the reference marker, §4); if none, cutoff = epoch 0 (all human comments are candidates — used for the fresh-review R-A/R-C path).
+  - cutoff = `created_at` of the **latest bot** comment on the issue whose body starts with `rework-requested:`, `decision-requested:`, or `decision-clarify:` (the §4 reference markers — all three reset the "new trusted input" window); if none, cutoff = epoch 0 (all human comments are candidates — used for the fresh-review R-A/R-C path).
   - candidates = non-bot comments on the **issue** and the **PR** conversation with `created_at > cutoff`.
   - keep only candidates whose author satisfies `is_trusted` (untrusted dropped entirely, AC1).
   - `edited = (updated_at != created_at)` (AC27 input signal).
   - Exit `0` on success, `1` on API failure.
 
 Note: inline PR review-thread comments and review submissions are out of scope for this deterministic collector; the command (Task 9) may still read them for the *self-review*, but decision-gate *answers* are conversation comments.
+
+> **Known approximation — AC19 trust continuity (§5.5 "신뢰 연속성"):** `is_trusted` is a single **conversion-time** query. This fully satisfies §5.2's normative minimum ("변환 시점 재조회") and the common case AC19 targets — a user who *lost* access by conversion time is correctly rejected. It does **not** detect a user who was untrusted when they wrote the answer but is trusted now, nor reconstruct a continuous trust window between `decision-requested:` and conversion (GitHub exposes no historical permission). This is an accepted approximation tied to §10.1 (trust-policy/caching). If full continuity is later required, capture each trusted author's permission into a bot marker at first sighting and compare on re-entry; that is out of scope here.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -625,6 +654,19 @@ setup() {
   [ "$(echo "$output" | jq -r '.[0].id')" = "7" ]
 }
 
+@test "rework-requested: also resets the cutoff (no pre-rework leak)" {
+  # bot rework-requested at T1; carol answer before it (T0, dropped) and after it (T2, kept)
+  queue_response '[
+    {"id":1,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","body":"pre-rework 답변"},
+    {"id":2,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"rework-requested: fix X"},
+    {"id":3,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"post-rework 답변"}
+  ]'
+  queue_response '[]'
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "3" ]
+}
+
 @test "API failure on issue comments → exit 1" {
   export GH_FAIL_MATCH='issues/5/comments'
   run bash "$SCRIPT" 5 9
@@ -653,12 +695,18 @@ load_config
 
 issue="$1"; pr="$2"
 
-icmts=$(gh api "repos/$REPO/issues/$issue/comments" --paginate) || { log ERROR "issue comments failed"; exit 1; }
-pcmts=$(gh api "repos/$REPO/issues/$pr/comments" --paginate)     || { log ERROR "pr comments failed"; exit 1; }
+# `gh api --paginate` concatenates one JSON array per page ([...][...]); `jq -s 'add'`
+# merges them into a single array so `--argjson` below receives valid JSON. `// []`
+# guards the zero-page case (slurp of empty input → null) so it stays a valid array.
+icmts=$(gh api "repos/$REPO/issues/$issue/comments" --paginate | jq -s 'add // []') || { log ERROR "issue comments failed"; exit 1; }
+pcmts=$(gh api "repos/$REPO/issues/$pr/comments" --paginate | jq -s 'add // []')     || { log ERROR "pr comments failed"; exit 1; }
 
-# cutoff = created_at of the latest bot reference marker on the ISSUE (decision-requested/clarify).
+# cutoff = created_at of the latest bot reference marker on the ISSUE. Per spec §4, "new
+# trusted input" is measured after the latest of rework-requested:/decision-requested:/
+# decision-clarify: — all three must reset the window (rework-requested: matters on a
+# rework→re-review cycle, so pre-rework answers do not leak back in).
 cutoff=$(echo "$icmts" | jq -r --arg b "$BOT" '
-  [.[] | select(.user.login==$b and ((.body|startswith("decision-requested:")) or (.body|startswith("decision-clarify:")))) | .created_at]
+  [.[] | select(.user.login==$b and ((.body|startswith("rework-requested:")) or (.body|startswith("decision-requested:")) or (.body|startswith("decision-clarify:")))) | .created_at]
   | (max // "1970-01-01T00:00:00Z")')
 
 # Merge issue + PR comments, tag source, drop bot-authored, keep created_at > cutoff.
@@ -687,7 +735,7 @@ Run:
 chmod +x plugins/orchestration/scripts/orchestration/trusted-answers.sh
 bats tests/orchestration/trusted-answers.bats
 ```
-Expected: PASS (4 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Lint**
 
@@ -969,7 +1017,13 @@ case "$DECISION" in
   skip-exists|cap-noted) : ;;   # idempotent no-op
 esac
 ```
-If this R-C was reached by resolving a gate ("별건"), first post `decision-resolved: out-of-scope` and remove `status:needs-decision`. Then continue to R-D (cap-exceeded items do not block the merge request).
+If this R-C was reached by resolving a gate ("별건"), close the gate exactly once **before** falling through to R-D:
+```bash
+gh issue comment "$N" --body "decision-resolved: out-of-scope" --repo "$REPO"
+gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO"
+GATE_OPEN=no   # gate now closed — stops R-D's guard from posting a 2nd decision-resolved:
+```
+Then continue to R-D (cap-exceeded items do not block the merge request). Setting `GATE_OPEN=no` is required: R-D's gate-resolution guard reuses the `$GATE_OPEN` captured in Step E, so without this a second, contradictory `decision-resolved: proceed` would be posted (§5.5 — exactly one `decision-resolved:` closes a gate).
 
 **R-D — request human merge**
 ```bash
@@ -994,7 +1048,7 @@ Minor non-blocking observations that do not affect accuracy are appended to the 
 ### Step F — External termination / manual label hygiene (each tick)
 
 - **PR closed unmerged or issue closed** (incl. during merge polling): remove `status:in-review`/`status:needs-decision`, post an audit marker, drop from the queue.
-- **Reopened:** if the actor satisfies `is_trusted`, restore `status:in-review`; else set `status:triage` and do not resume. Close any prior open gate with `decision-resolved: closed-and-reopened`; re-review from current HEAD. Keep `followup-created:` markers.
+- **Reopened:** if the actor satisfies `is_trusted`, restore `status:in-review`; else set `status:triage` and do not resume. Close any prior open gate with `decision-resolved: closed-and-reopened` **and release `status:needs-decision`** (`gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO" 2>/dev/null || true`) — spec §5.6 pairs the gate-close with the label release, and the removal is idempotent if the close path already dropped it. Re-review from current HEAD. Keep `followup-created:` markers.
 - **`status:needs-decision` present with no open `decision-requested:`** (bot_marker_pending == no): a human added the label without a bot gate → remove it and post a warning marker (regardless of actor).
 - **`status:needs-decision` manually removed while a gate is open:** if the remover is trusted, post `decision-resolved: manual-override` (terminate gate); otherwise restore the label and warn.
 ````
@@ -1060,7 +1114,19 @@ Append to `plugins/orchestration/assets/CLAUDE.md`:
 - Trust/cap policy lives in `.claude/orchestration.json` under `reviewer` (`permissionThreshold`, `allowlist`, `followupIssueCapPerPR`).
 ```
 
-- [ ] **Step 2: Append the AC traceability table to the spec**
+- [ ] **Step 2: Register the `merge-resolved:` marker in spec §7**
+
+The plan introduces one marker beyond spec §7's list — `merge-resolved:` (the close-half used by `bot_marker_pending` to invalidate a superseded merge request on rework, AC25). Add it to the spec so §7 stays the single source of truth. In `docs/superpowers/specs/ganpan-review-queue-redesign.md` §7, change the **신규 마커** line:
+
+```
+- **신규 마커(봇 작성):** `decision-requested:` / `decision-resolved:` / `decision-clarify:` / `followup-created:` / `merge-requested:` / `cap-exceeded:`.
+```
+to additionally list `merge-resolved:`:
+```
+- **신규 마커(봇 작성):** `decision-requested:` / `decision-resolved:` / `decision-clarify:` / `followup-created:` / `merge-requested:` / `merge-resolved:` / `cap-exceeded:`.
+```
+
+- [ ] **Step 3: Append the AC traceability table to the spec**
 
 Append to `docs/superpowers/specs/ganpan-review-queue-redesign.md`:
 
@@ -1072,11 +1138,12 @@ Append to `docs/superpowers/specs/ganpan-review-queue-redesign.md`:
 
 | AC | 구현 위치 |
 |---|---|
-| AC1, AC13, AC19, AC22 | `lib.sh:is_trusted` + `trusted-answers.sh` (trust filter at conversion time) |
+| AC1, AC13, AC22 | `lib.sh:is_trusted` + `trusted-answers.sh` (trust filter at conversion time) |
+| AC19 | `lib.sh:is_trusted` at conversion time — **partial** (rejects a user who lost access; does not reconstruct a full continuous-trust window — see Task 6 "Known approximation", §10.1) |
 | AC2 | review-queue.md R-A (rework path, worktree/assignee preserved) |
 | AC3 | review-queue.md R-B (decision gate, no merge request) |
 | AC4 | `trusted-answers.sh` (no new trusted input → empty → no-op) |
-| AC5, AC18 | `decision-resolve.sh` (rework/proceed/followup vs clarify) |
+| AC5, AC18 | `decision-resolve.sh` (classify → action) + review-queue.md Step D branches 2–4 (rework→R-A, proceed→R-D, followup→R-C→R-D) and Step D.6 / R-B-clarify (clarify → `decision-clarify:`, hold gate) |
 | AC6 | review-queue.md R-C (`gh issue create --label status:blocked`) |
 | AC7 | review-queue.md R-D (merge poll → status:qa → project_sync → worktree remove) |
 | AC8, AC16, AC21 | `followup-dedup.sh` (item-key dedup, cap, cap-noted) |
@@ -1084,7 +1151,7 @@ Append to `docs/superpowers/specs/ganpan-review-queue-redesign.md`:
 | AC10 | review-queue.md Step D priority (R-A over R-B) |
 | AC11 | review-queue.md R-D + `bot_marker_pending("merge-requested:")` |
 | AC12 | review-queue.md Step F (external termination) |
-| AC14, AC26 | review-queue.md Step C (per-answer isolation, schema-bound) |
+| AC14, AC26 | review-queue.md Step C (per-answer isolation, schema-bound) + `decision-resolve.sh` schema-violation → clarify backstop |
 | AC15 | review-queue.md Step F (reopen trust check) |
 | AC17, AC23 | review-queue.md Step F (manual label hygiene) |
 | AC24 | review-queue.md Step D.6 (clarify, no auto-adopt) |
@@ -1092,11 +1159,11 @@ Append to `docs/superpowers/specs/ganpan-review-queue-redesign.md`:
 | AC27 | review-queue.md Step C (edited → unclassifiable) |
 ```
 
-- [ ] **Step 3: Self-review — confirm every AC has a home**
+- [ ] **Step 4: Self-review — confirm every AC has a home**
 
 Read §8 (AC1–AC27) of the spec against the table above. Every AC number must appear in the table's left column. If one is missing, add the implementing task or note the gap in the iteration summary (do not fabricate).
 
-- [ ] **Step 4: Full validation**
+- [ ] **Step 5: Full validation**
 
 Run:
 ```bash
@@ -1106,7 +1173,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 ```
 Expected: all bats PASS; shellcheck clean; all `jq` validations succeed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add plugins/orchestration/assets/CLAUDE.md docs/superpowers/specs/ganpan-review-queue-redesign.md
@@ -1117,11 +1184,13 @@ git commit -m "docs(orch): document decision-gate lane and add AC traceability"
 
 ## Self-Review (plan author's checklist — completed)
 
-**1. Spec coverage:** G1→Task 6/8; G2→Task 3; G3→Task 5/8 (R-B); G4→Task 7/8 (R-C); G5→Task 4/7 (idempotency). S1→Task 8 Step A/C; S2→Global Constraints + all `select(author==BOT)`; S3→Task 8 R-D; S4→Task 3 (call-time query). §5.1→Task 6; §5.2→Task 3/6; §5.3→Task 4/6; §5.4→Task 5/7/8; §5.5→Task 5/8; §5.6→Task 8 Step F; §7 label/markers→Task 1/8; AC1–AC27→Task 9 table. No uncovered requirement found.
+**1. Spec coverage:** G1→Task 6/8; G2→Task 3; G3→Task 5/8 (R-B); G4→Task 7/8 (R-C); G5→Task 4/7 (idempotency). S1→Task 8 Step A/C; S2→Global Constraints + all `select(author==BOT)`; S3→Task 8 R-D; S4→Task 3 (call-time query). §5.1→Task 6; §5.2→Task 3/6; §5.3→Task 4/6; §5.4→Task 5/7/8; §5.5→Task 5/8; §5.6→Task 8 Step F; §7 label/markers→Task 1/8; AC1–AC27→Task 9 table. **AC19 is covered only as a documented approximation** (conversion-time check, not full continuity — Task 6 "Known approximation", §10.1); all other ACs fully covered.
 
 **2. Placeholders:** Routing-message bodies (`<reasons>`, `<question>`, `<follow-up title>`) are intentional human-authored content the agent fills at runtime, not plan gaps; they sit inside quoted strings so `bash -n` (Task 8 Step 2) accepts them. All code steps contain runnable code.
 
-**3. Type consistency:** `is_trusted`/`perm_rank`/`bot_marker_pending` signatures match between lib.sh (Tasks 3–4) and use sites (Tasks 6, 8). `decision-resolve.sh` bucket vocabulary (`rework|proceed|followup|unclassifiable`) is identical in Task 5 (producer), Task 8 Step C (producer of input), and the action vocabulary (`rework|proceed|followup|clarify`) is consistent in Task 5 output and Task 8 Step D. `followup-dedup.sh` outputs (`create|skip-exists|cap-exceeded|cap-noted`) match the `case` in Task 8. Config keys (`reviewer.permissionThreshold|allowlist|followupIssueCapPerPR`) match between Task 2 template, lib exports, and `is_trusted`/`followup-dedup` reads.
+**3. Type consistency:** `is_trusted`/`perm_rank`/`bot_marker_pending` signatures match between lib.sh (Tasks 3–4) and use sites (Tasks 6, 8). `decision-resolve.sh` bucket vocabulary (`rework|proceed|followup|unclassifiable`) is identical in Task 5 (producer), Task 8 Step C (producer of input), and the action vocabulary (`rework|proceed|followup|clarify`) is consistent in Task 5 output and Task 8 Step D; `decision-resolve.sh` always exits 0 (out-of-schema → `clarify`), so Task 8 Step D's `ACTION=$(... | jq -r .action)` never aborts the lane. `followup-dedup.sh` outputs (`create|skip-exists|cap-exceeded|cap-noted`) match the `case` in Task 8. Config keys (`reviewer.permissionThreshold|allowlist|followupIssueCapPerPR`) match between Task 2 template, lib exports, and `is_trusted`/`followup-dedup` reads.
+
+**4. Test harness:** All new bats tests rely on `setup_gh_stub` (Task 3 wires it into `lib.bats`'s `setup()`) and the read-`api` stub branch (Task 3 Step 1). No test pipes into `run` (each feeds stdin via a temp file + redirection inside a single `run` invocation).
 
 ---
 
