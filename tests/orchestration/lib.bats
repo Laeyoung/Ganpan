@@ -46,3 +46,30 @@ JSON
   [ "$status" -eq 0 ]
   [ "$output" = "o/r" ]
 }
+
+@test "load_config exports reviewer.* with defaults when block present" {
+  cat > "$ORCH_CONFIG" <<'JSON'
+{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,
+ "reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},
+ "commands":{"test":null,"build":null,"lint":null},
+ "worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},
+ "reviewer":{"permissionThreshold":"write","allowlist":["alice","bob"],"followupIssueCapPerPR":3}}
+JSON
+  run bash -c 'source "$0"; load_config; printf "%s|%s|%s" "$REVIEWER_PERM_THRESHOLD" "$FOLLOWUP_CAP" "$REVIEWER_ALLOWLIST"' "$LIB"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "write|3|"* ]]
+  [[ "$output" == *alice* ]]
+  [[ "$output" == *bob* ]]
+}
+
+@test "load_config reviewer.* falls back to defaults when block absent" {
+  cat > "$ORCH_CONFIG" <<'JSON'
+{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,
+ "reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},
+ "commands":{"test":null,"build":null,"lint":null},
+ "worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}
+JSON
+  run bash -c 'source "$0"; load_config; printf "%s|%s|[%s]" "$REVIEWER_PERM_THRESHOLD" "$FOLLOWUP_CAP" "$REVIEWER_ALLOWLIST"' "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "write|3|[]" ]
+}

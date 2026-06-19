@@ -19,10 +19,13 @@ load_config() {
   WORKTREE_BASE=$(jq -er '.worktreeBaseDir' "$cfg")   || { log ERROR "worktreeBaseDir missing"; return 1; }
   PROJECT_NUMBER=$(jq -r '.project.number // "null"' "$cfg")
   PROJECT_STATUS_FIELD=$(jq -er '.project.statusField' "$cfg") || { log ERROR "project.statusField missing"; return 1; }
+  REVIEWER_PERM_THRESHOLD=$(jq -r '.reviewer.permissionThreshold // "write"' "$cfg")
+  REVIEWER_ALLOWLIST=$(jq -r '.reviewer.allowlist[]? // empty' "$cfg")
+  FOLLOWUP_CAP=$(jq -r '.reviewer.followupIssueCapPerPR // 3' "$cfg")
   # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
   # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
-  export REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
+  export REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP
 }
 
 # Token sorts by time first (fixed-width ISO8601), then worker id → lexicographic-min == earliest.
