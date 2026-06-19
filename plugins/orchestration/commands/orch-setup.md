@@ -48,6 +48,6 @@ Do exactly this:
    ```bash
    gh label list --repo "$(jq -r .repo .claude/orchestration.json)" | grep -c '^status:' || true
    ```
-   Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`).
+   Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`) — or run all four at once from one session with `/loop 20m /run-all` (the launcher; `20m` is an adjustable example).
 
 Never create the PAT or change branch protection yourself — those are human, security-sensitive actions.
