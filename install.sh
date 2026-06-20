@@ -103,9 +103,23 @@ if [ ! -f "$TARGET/.ganpan/orchestration.json" ] && [ ! -f "$TARGET/.claude/orch
       ;;
   esac
 fi
+SELECTED_CONFIG_PATH=""
+if [ -f "$TARGET/.ganpan/orchestration.json" ]; then
+  SELECTED_CONFIG_PATH=".ganpan/orchestration.json"
+elif [ -f "$TARGET/.claude/orchestration.json" ]; then
+  SELECTED_CONFIG_PATH=".claude/orchestration.json"
+fi
+LEGACY_CONFIG_FALLBACK=""
+if wants_codex && [ "$SELECTED_CONFIG_PATH" = ".claude/orchestration.json" ]; then
+  LEGACY_CONFIG_FALLBACK=1
+fi
 mkdir -p "$TARGET/docs"
 [ -f "$TARGET/docs/SETUP.md" ]                  || cp "$SRC/docs/SETUP.md" "$TARGET/docs/SETUP.md"
 info ".github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, orchestration config, docs/SETUP.md (if absent)"
+if [ -n "$LEGACY_CONFIG_FALLBACK" ]; then
+  info "Using legacy .claude/orchestration.json as the selected config fallback"
+  info "To migrate later, create .ganpan/orchestration.json deliberately"
+fi
 
 # --- sentinel helpers ---------------------------------------------------------
 # stamp <file> — append the version sentinel as the last line, in the right comment syntax.
@@ -133,11 +147,20 @@ needs_write() {
 for src in "$PLUGIN"/scripts/orchestration/*.sh; do
   [ -e "$src" ] || die "no engine scripts at $PLUGIN/scripts/orchestration/ — incomplete checkout?"
   dest="$TARGET/scripts/orchestration/$(basename "$src")"
-  needs_write "$dest" && { cp "$src" "$dest"; chmod +x "$dest"; stamp "$dest"; }
+  needs_write "$dest" && { cp "$src" "$dest"; stamp "$dest"; chmod +x "$dest"; }
 done
 info "scripts/orchestration/*.sh"
 
-# --- 3. lane commands (rewrite \${CLAUDE_PLUGIN_ROOT}/ -> ./ between copy and stamp; orch-setup.md excluded) ---
+# --- 3. shared lane references ------------------------------------------------
+mkdir -p "$TARGET/references/lanes"
+for src in "$PLUGIN"/references/lanes/*.md; do
+  [ -e "$src" ] || die "no lane references at $PLUGIN/references/lanes/ — incomplete checkout?"
+  dest="$TARGET/references/lanes/$(basename "$src")"
+  needs_write "$dest" && { cp "$src" "$dest"; stamp "$dest"; }
+done
+info "references/lanes/*.md"
+
+# --- 4. lane commands (rewrite \${CLAUDE_PLUGIN_ROOT}/ -> ./ between copy and stamp; orch-setup.md excluded) ---
 if wants_claude; then
   for name in work-issue triage review-queue qa-check; do
     src="$PLUGIN/commands/$name.md"; dest="$TARGET/.claude/commands/$name.md"
@@ -147,7 +170,7 @@ if wants_claude; then
   info ".claude/commands/{work-issue,triage,review-queue,qa-check}.md"
 fi
 
-# --- 4. Codex skills ----------------------------------------------------------
+# --- 5. Codex skills ----------------------------------------------------------
 if wants_codex; then
   [ -d "$CODEX_PLUGIN/skills" ] || die "Codex skill source not found: $CODEX_PLUGIN/skills"
   while IFS= read -r src; do
@@ -159,7 +182,7 @@ if wants_codex; then
   info ".agents/skills/ganpan-*"
 fi
 
-# --- 5. CLAUDE.md / AGENTS.md (create or append conventions once) -------------
+# --- 6. CLAUDE.md / AGENTS.md (create or append conventions once) -------------
 # Note: CLAUDE.md is merge-managed (append-once under its own sentinel), NOT
 # version-stamped — `--force` deliberately does not rewrite it (spec §3.5); a
 # user editing conventions text upstream merges them manually.
@@ -199,8 +222,8 @@ case "$TARGET_MODE" in
   claude) CONFIG_PATH=".claude/orchestration.json"; LANE_HINT="/loop /ganpan:work-issue · /loop 10m /ganpan:triage · /loop 5m /ganpan:review-queue · /ganpan:qa-check" ;;
   codex|both) CONFIG_PATH=".ganpan/orchestration.json"; LANE_HINT="Use Codex skills: ganpan-work-issue · ganpan-triage · ganpan-review-queue · ganpan-qa-check" ;;
 esac
-if [ ! -f "$TARGET/$CONFIG_PATH" ] && [ -f "$TARGET/.claude/orchestration.json" ]; then
-  CONFIG_PATH=".claude/orchestration.json"
+if [ -n "$SELECTED_CONFIG_PATH" ]; then
+  CONFIG_PATH="$SELECTED_CONFIG_PATH"
 fi
 cat <<EOF
 

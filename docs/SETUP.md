@@ -39,6 +39,8 @@ To install both Claude and Codex surfaces:
 New `--target both` installs create `.ganpan/orchestration.json` and do not
 create `.claude/orchestration.json` unless a legacy config already exists.
 
+For detailed Codex operation, see [CODEX_RUNBOOK.md](CODEX_RUNBOOK.md).
+
 ### Upgrading a copy-in install
 `install.sh` re-run upgrades files whose version sentinel differs. **v1 files
 predate the sentinel**, so the first upgrade off a v1 copy must use

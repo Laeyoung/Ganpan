@@ -195,3 +195,5 @@ tests/                                   # bats 테스트
 - Contents:write 봇은 `main` 이외 브랜치를 force-push·삭제할 수 있음.
 
 자세한 내용은 [`docs/SETUP.md`](docs/SETUP.md)를 참고하세요.
+
+Codex 전용 설치와 실행 절차는 [`docs/CODEX_RUNBOOK.md`](docs/CODEX_RUNBOOK.md)를 참고하세요. Phase 2/3 개발자는 [`docs/PHASE1_DEV_LOG.md`](docs/PHASE1_DEV_LOG.md)와 [`docs/CODEX_ADAPTER_RULES.md`](docs/CODEX_ADAPTER_RULES.md)를 먼저 확인하세요.
