@@ -20,6 +20,8 @@ setup() {
     [ "$status" -eq 0 ]
     run grep -Eq '^description: .+' "$metadata"
     [ "$status" -eq 0 ]
+    run yq e '.' "$metadata"
+    [ "$status" -eq 0 ]
   done
 }
 
@@ -48,4 +50,59 @@ setup() {
     "$REPO_ROOT/plugins/orchestration/commands/review-queue.md" \
     "$REPO_ROOT/plugins/orchestration/commands/qa-check.md"
   [ "$status" -ne 0 ]
+}
+
+@test "runtime Claude lane commands point at shared lane references" {
+  for lane in triage work-issue review-queue qa-check; do
+    run grep -q "references/lanes/$lane.md" "$REPO_ROOT/plugins/orchestration/commands/$lane.md"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "qa command shows the concrete repo-root capture before resolving config" {
+  run grep -q 'REPO_ROOT="\$PWD"' "$REPO_ROOT/plugins/orchestration/commands/qa-check.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "qa first-failure instructions preserve regression issue audit link" {
+  for file in \
+    "$REPO_ROOT/plugins/orchestration/commands/qa-check.md" \
+    "$REPO_ROOT/plugins/orchestration/references/lanes/qa-check.md"; do
+    run grep -qi 'regression issue.*number\|linked regression issue' "$file"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "work-issue reference preserves rework resume safety steps" {
+  ref="$REPO_ROOT/plugins/orchestration/references/lanes/work-issue.md"
+  run grep -q 'kill any orphaned heartbeat' "$ref"
+  [ "$status" -eq 0 ]
+  run grep -q 'rework-resolved:' "$ref"
+  [ "$status" -eq 0 ]
+}
+
+@test "claude setup command respects the shared config contract" {
+  setup_cmd="$REPO_ROOT/plugins/orchestration/commands/orch-setup.md"
+  run grep -q '.ganpan/orchestration.json' "$setup_cmd"
+  [ "$status" -eq 0 ]
+  run grep -q 'neither .ganpan/orchestration.json nor .claude/orchestration.json exists' "$setup_cmd"
+  [ "$status" -eq 0 ]
+  run grep -q 'both config files exist and differ' "$setup_cmd"
+  [ "$status" -eq 0 ]
+}
+
+@test "installed codex skills resolve references and metadata from .agents skills" {
+  target="$BATS_TEST_TMPDIR/target"
+  mkdir -p "$target/.git"
+
+  run bash "$REPO_ROOT/install.sh" "$target" --target codex
+  [ "$status" -eq 0 ]
+
+  for name in ganpan-triage ganpan-work-issue ganpan-review-queue ganpan-qa-check ganpan-setup; do
+    [ -f "$target/.agents/skills/$name/SKILL.md" ]
+    [ -d "$target/.agents/skills/$name/references" ]
+    [ -f "$target/.agents/skills/$name/agents/openai.yaml" ]
+    run yq e '.' "$target/.agents/skills/$name/agents/openai.yaml"
+    [ "$status" -eq 0 ]
+  done
 }

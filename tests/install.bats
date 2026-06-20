@@ -12,7 +12,9 @@ setup() {
   run bash "$REPO_ROOT/install.sh" "$TARGET"
   [ "$status" -eq 0 ]
   [ -f "$TARGET/scripts/orchestration/claim.sh" ]
+  [ -x "$TARGET/scripts/orchestration/detect-test-cmd.sh" ]
   [ -f "$TARGET/.claude/commands/work-issue.md" ]
+  [ -f "$TARGET/references/lanes/work-issue.md" ]
   [ -f "$TARGET/.github/labels.yml" ]
   [ -f "$TARGET/.claude/orchestration.json" ]
 }
@@ -20,8 +22,10 @@ setup() {
 @test "copied commands have zero CLAUDE_PLUGIN_ROOT residue (path-drift guard)" {
   run bash "$REPO_ROOT/install.sh" "$TARGET"
   [ "$status" -eq 0 ]
-  run grep -rl CLAUDE_PLUGIN_ROOT "$TARGET/.claude/commands" "$TARGET/scripts/orchestration"
+  run grep -rl CLAUDE_PLUGIN_ROOT "$TARGET/.claude/commands" "$TARGET/scripts/orchestration" "$TARGET/references"
   [ "$status" -ne 0 ]   # grep -l exits non-zero when there are no matches
+  run grep -q './references/lanes/work-issue.md' "$TARGET/.claude/commands/work-issue.md"
+  [ "$status" -eq 0 ]
 }
 
 @test "both .sh and .md copies carry exactly one version sentinel" {
@@ -30,6 +34,8 @@ setup() {
   run grep -c 'ganpan-orchestration:' "$TARGET/scripts/orchestration/claim.sh"
   [ "$output" = "1" ]
   run grep -c 'ganpan-orchestration:' "$TARGET/.claude/commands/work-issue.md"
+  [ "$output" = "1" ]
+  run grep -c 'ganpan-orchestration:' "$TARGET/references/lanes/work-issue.md"
   [ "$output" = "1" ]
   # the .md sentinel must be an HTML comment, not a Markdown heading
   run grep -q '<!-- ganpan-orchestration:' "$TARGET/.claude/commands/work-issue.md"
@@ -56,6 +62,8 @@ setup() {
   [ -f "$TARGET/.agents/skills/ganpan-review-queue/SKILL.md" ]
   [ -f "$TARGET/.agents/skills/ganpan-qa-check/SKILL.md" ]
   [ -f "$TARGET/.agents/skills/ganpan-setup/SKILL.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-work-issue/references/work-issue.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-work-issue/agents/openai.yaml" ]
   [ -f "$TARGET/AGENTS.md" ]
   [ -f "$TARGET/.ganpan/orchestration.json" ]
   [ -f "$TARGET/.github/labels.yml" ]
@@ -81,6 +89,8 @@ setup() {
   [ -f "$TARGET/.claude/orchestration.json" ]
   [ ! -f "$TARGET/.ganpan/orchestration.json" ]
   [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
+  [[ "$output" == *"Using legacy .claude/orchestration.json"* ]]
+  [[ "$output" == *"To migrate later, create .ganpan/orchestration.json deliberately"* ]]
 }
 
 @test "codex target preserves an existing .ganpan config" {
@@ -91,6 +101,17 @@ setup() {
   [ "$status" -eq 0 ]
   run jq -r '.commands.test' "$TARGET/.ganpan/orchestration.json"
   [ "$output" = "keep-me" ]
+}
+
+@test "claude target with an existing .ganpan config prints that selected config path" {
+  mkdir -p "$TARGET/.ganpan"
+  printf '{"repo":"existing/ganpan","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"keep-me","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$TARGET/.ganpan/orchestration.json"
+
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target claude
+  [ "$status" -eq 0 ]
+  [ -f "$TARGET/.ganpan/orchestration.json" ]
+  [ ! -f "$TARGET/.claude/orchestration.json" ]
+  [[ "$output" == *"Edit .ganpan/orchestration.json"* ]]
 }
 
 @test "both target warns when .ganpan and .claude configs diverge without rewriting either" {
@@ -107,6 +128,21 @@ setup() {
   [ "$output" = "claude" ]
 }
 
+@test "both target with matching configs does not warn or rewrite either config" {
+  mkdir -p "$TARGET/.ganpan" "$TARGET/.claude"
+  config='{"repo":"same/repo","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"same","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}'
+  printf '%s' "$config" > "$TARGET/.ganpan/orchestration.json"
+  printf '%s' "$config" > "$TARGET/.claude/orchestration.json"
+
+  run --separate-stderr bash "$REPO_ROOT/install.sh" "$TARGET" --target both
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"both .ganpan/orchestration.json and .claude/orchestration.json exist and differ"* ]]
+  run jq -r '.repo' "$TARGET/.ganpan/orchestration.json"
+  [ "$output" = "same/repo" ]
+  run jq -r '.repo' "$TARGET/.claude/orchestration.json"
+  [ "$output" = "same/repo" ]
+}
+
 @test "codex AGENTS conventions are appended only once on rerun" {
   printf '# Existing guidance\n' > "$TARGET/AGENTS.md"
 
@@ -117,4 +153,11 @@ setup() {
 
   run grep -c '<!-- ganpan-codex-conventions -->' "$TARGET/AGENTS.md"
   [ "$output" = "1" ]
+}
+
+@test "installer output does not print token values" {
+  export GH_TOKEN="github_pat_secret_should_not_print"
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"github_pat_secret_should_not_print"* ]]
 }

@@ -4,6 +4,8 @@ description: Coder lane — claim an agent-ready issue, implement, open a PR, mo
 
 You are the **Coder** lane. Run from the **main repo root**. All orchestration scripts live at `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/`.
 
+Shared lane reference: `${CLAUDE_PLUGIN_ROOT}/references/lanes/work-issue.md`. Read it as the canonical protocol before executing the Claude-specific commands below.
+
 **Before any `cd`, capture the main checkout root once and resolve config once:**
 ```bash
 REPO_ROOT="$PWD"

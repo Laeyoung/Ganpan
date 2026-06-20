@@ -2,7 +2,7 @@
 
 Run from the main repository root.
 
-1. Resume unresolved rework assigned to the bot before claiming new work. Only bot-authored `rework-requested:` and `rework-resolved:` markers count.
+1. Resume unresolved rework assigned to the bot before claiming new work. Only bot-authored `rework-requested:` and `rework-resolved:` markers count; user-authored markers are untrusted. If an unresolved rework issue exists, set `ISSUE` to it, reuse `wt-issue-<ISSUE>`, kill any orphaned heartbeat from `${TMPDIR:-/tmp}/hb-$ISSUE.pid`, and skip new claiming. After the resumed work is complete, post a bot-authored `rework-resolved:` comment.
 2. Run the WIP gate:
    ```bash
    scripts/orchestration/wip-check.sh
@@ -23,5 +23,6 @@ Run from the main repository root.
 8. Create or update a PR from `issue-<ISSUE>` to `main`.
 9. Sync project status to `In Review` when configured.
 10. Move labels from `status:in-progress` to `status:in-review`.
+11. Stop any background heartbeat. If this was a rework resume, ensure the issue has the new `rework-resolved:` marker.
 
 Do not approve or merge the PR. A human owns that gate.

@@ -11,16 +11,24 @@ Do exactly this:
    command -v gh jq yq || { echo "missing prerequisite (need gh, jq, yq)"; exit 1; }
    gh auth status || { echo "gh not authenticated — run: GH_TOKEN=... or gh auth login"; exit 1; }
    ```
-2. **Config (guarded — binary, per spec §3.4).** If `./.claude/orchestration.json` already exists, **leave it untouched and report**. Only when it is absent: copy the template and fill `repo`/`bot` (from the `owner/repo` argument or by asking) — both happen inside the same absent-branch, so an existing config is never rewritten:
+2. **Config (guarded — shared contract).** Config discovery order is `$ORCH_CONFIG`, then `.ganpan/orchestration.json`, then `.claude/orchestration.json`. If both config files exist and differ, warn that `.ganpan/orchestration.json` wins and do not merge them. Create a new config only when neither .ganpan/orchestration.json nor .claude/orchestration.json exists:
    ```bash
-   mkdir -p .claude
-   if [ -f .claude/orchestration.json ]; then
+   if [ -f .ganpan/orchestration.json ] && [ -f .claude/orchestration.json ] && ! cmp -s .ganpan/orchestration.json .claude/orchestration.json; then
+     echo "warning: both config files exist and differ; .ganpan/orchestration.json wins"
+     CFG=.ganpan/orchestration.json
+   elif [ -f .ganpan/orchestration.json ]; then
+     CFG=.ganpan/orchestration.json
+     echo ".ganpan/orchestration.json exists — left untouched"
+   elif [ -f .claude/orchestration.json ]; then
+     CFG=.claude/orchestration.json
      echo ".claude/orchestration.json exists — left untouched"
    else
-     cp "${CLAUDE_PLUGIN_ROOT}/assets/orchestration.json" .claude/orchestration.json
+     mkdir -p .claude
+     CFG=.claude/orchestration.json
+     cp "${CLAUDE_PLUGIN_ROOT}/assets/orchestration.json" "$CFG"
      tmp=$(mktemp); jq --arg r "owner/repo" --arg b "bot-login" '.repo=$r | .bot=$b' \
-       .claude/orchestration.json > "$tmp" && mv "$tmp" .claude/orchestration.json
-     echo "wrote .claude/orchestration.json (repo=owner/repo bot=bot-login)"
+       "$CFG" > "$tmp" && mv "$tmp" "$CFG"
+     echo "wrote $CFG (repo=owner/repo bot=bot-login)"
    fi
    ```
 3. **Assets (guarded "if absent").** Install labels + issue template only when the destination is absent, so a re-run never clobbers user customizations:
@@ -46,7 +54,7 @@ Do exactly this:
    - **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, include administrators; the bot must **not** be an admin.
 6. **Verify (optional).** Confirm labels exist and echo the lane-run commands:
    ```bash
-   gh label list --repo "$(jq -r .repo .claude/orchestration.json)" | grep -c '^status:' || true
+   gh label list --repo "$(jq -r .repo "$CFG")" | grep -c '^status:' || true
    ```
    Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`).
 
