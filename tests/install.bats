@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0  # for `run --separate-stderr`
+
 setup() {
   REPO_ROOT="$BATS_TEST_DIRNAME/.."
   TARGET="$BATS_TEST_TMPDIR/target"
@@ -43,4 +45,76 @@ setup() {
   [ "$output" = "1" ]   # .sh restamped, not doubled
   run grep -c 'ganpan-orchestration:' "$TARGET/.claude/commands/work-issue.md"
   [ "$output" = "1" ]   # .md restamped, not doubled
+}
+
+@test "codex target installs skills and platform config without claude commands" {
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+  [ -f "$TARGET/scripts/orchestration/claim.sh" ]
+  [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-triage/SKILL.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-review-queue/SKILL.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-qa-check/SKILL.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-setup/SKILL.md" ]
+  [ -f "$TARGET/AGENTS.md" ]
+  [ -f "$TARGET/.ganpan/orchestration.json" ]
+  [ -f "$TARGET/.github/labels.yml" ]
+  [ ! -d "$TARGET/.claude/commands" ]
+  [ ! -f "$TARGET/.claude/orchestration.json" ]
+}
+
+@test "both target installs claude and codex surfaces with .ganpan config for new repos" {
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target both
+  [ "$status" -eq 0 ]
+  [ -f "$TARGET/.claude/commands/work-issue.md" ]
+  [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
+  [ -f "$TARGET/.ganpan/orchestration.json" ]
+  [ ! -f "$TARGET/.claude/orchestration.json" ]
+}
+
+@test "codex target uses existing legacy claude config as fallback without creating .ganpan config" {
+  mkdir -p "$TARGET/.claude"
+  printf '{"repo":"legacy/repo","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$TARGET/.claude/orchestration.json"
+
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+  [ -f "$TARGET/.claude/orchestration.json" ]
+  [ ! -f "$TARGET/.ganpan/orchestration.json" ]
+  [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
+}
+
+@test "codex target preserves an existing .ganpan config" {
+  mkdir -p "$TARGET/.ganpan"
+  printf '{"repo":"existing/ganpan","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"keep-me","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$TARGET/.ganpan/orchestration.json"
+
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+  run jq -r '.commands.test' "$TARGET/.ganpan/orchestration.json"
+  [ "$output" = "keep-me" ]
+}
+
+@test "both target warns when .ganpan and .claude configs diverge without rewriting either" {
+  mkdir -p "$TARGET/.ganpan" "$TARGET/.claude"
+  printf '{"repo":"new/repo","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"ganpan","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$TARGET/.ganpan/orchestration.json"
+  printf '{"repo":"old/repo","bot":"bot","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"claude","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$TARGET/.claude/orchestration.json"
+
+  run --separate-stderr bash "$REPO_ROOT/install.sh" "$TARGET" --target both
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"both .ganpan/orchestration.json and .claude/orchestration.json exist and differ"* ]]
+  run jq -r '.commands.test' "$TARGET/.ganpan/orchestration.json"
+  [ "$output" = "ganpan" ]
+  run jq -r '.commands.test' "$TARGET/.claude/orchestration.json"
+  [ "$output" = "claude" ]
+}
+
+@test "codex AGENTS conventions are appended only once on rerun" {
+  printf '# Existing guidance\n' > "$TARGET/AGENTS.md"
+
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+  run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
+  [ "$status" -eq 0 ]
+
+  run grep -c '<!-- ganpan-codex-conventions -->' "$TARGET/AGENTS.md"
+  [ "$output" = "1" ]
 }

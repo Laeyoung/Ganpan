@@ -7,9 +7,31 @@ export SCRIPT_DIR
 
 log() { printf '[%s] %s\n' "$1" "${*:2}" >&2; }
 
+resolve_config_path() {
+  local root="${1:-.}"
+  if [ -n "${ORCH_CONFIG:-}" ]; then
+    printf '%s\n' "$ORCH_CONFIG"
+    return 0
+  fi
+
+  if [ -f "$root/.ganpan/orchestration.json" ]; then
+    printf '%s\n' "$root/.ganpan/orchestration.json"
+    return 0
+  fi
+
+  if [ -f "$root/.claude/orchestration.json" ]; then
+    printf '%s\n' "$root/.claude/orchestration.json"
+    return 0
+  fi
+
+  printf '%s\n' "$root/.ganpan/orchestration.json"
+}
+
 load_config() {
-  local cfg="${ORCH_CONFIG:-./.claude/orchestration.json}"
+  local cfg
+  cfg="$(resolve_config_path)"
   if [ ! -f "$cfg" ]; then log ERROR "config not found: $cfg"; return 1; fi
+  ORCH_CONFIG_PATH="$cfg"
   REPO=$(jq -er '.repo' "$cfg")                       || { log ERROR "config.repo missing"; return 1; }
   BOT=$(jq -er '.bot' "$cfg")                         || { log ERROR "config.bot missing"; return 1; }
   CANDIDATE_N=$(jq -er '.candidateN' "$cfg")          || { log ERROR "config.candidateN missing"; return 1; }
@@ -22,7 +44,7 @@ load_config() {
   # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
   # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
-  export REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
+  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
 }
 
 # Token sorts by time first (fixed-width ISO8601), then worker id → lexicographic-min == earliest.

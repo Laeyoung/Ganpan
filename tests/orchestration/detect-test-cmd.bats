@@ -68,3 +68,24 @@ cfg() { printf '%s' "$1" > "$ORCH_CONFIG"; }
   run bash -c "cd '$WORK' && '$SCRIPT' lint"
   [ "$output" = "make lint" ]
 }
+
+@test "config override is read from .ganpan when ORCH_CONFIG is unset" {
+  unset ORCH_CONFIG
+  mkdir -p "$WORK/.ganpan"
+  printf '%s' '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"npm run ci","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}' > "$WORK/.ganpan/orchestration.json"
+
+  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  [ "$status" -eq 0 ]
+  [ "$output" = "npm run ci" ]
+}
+
+@test "config override prefers .ganpan over .claude when both configs exist" {
+  unset ORCH_CONFIG
+  mkdir -p "$WORK/.ganpan" "$WORK/.claude"
+  printf '%s' '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"npm run ganpan","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}' > "$WORK/.ganpan/orchestration.json"
+  printf '%s' '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":"npm run claude","build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"S"}}' > "$WORK/.claude/orchestration.json"
+
+  run bash -c "cd '$WORK' && '$SCRIPT' test"
+  [ "$status" -eq 0 ]
+  [ "$output" = "npm run ganpan" ]
+}

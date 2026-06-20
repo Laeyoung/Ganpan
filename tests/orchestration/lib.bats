@@ -46,3 +46,37 @@ JSON
   [ "$status" -eq 0 ]
   [ "$output" = "o/r" ]
 }
+
+@test "resolve_config_path uses ORCH_CONFIG before cwd defaults" {
+  work="$BATS_TEST_TMPDIR/proj"
+  explicit="$BATS_TEST_TMPDIR/explicit.json"
+  mkdir -p "$work/.ganpan" "$work/.claude"
+  cp "$ORCH_CONFIG" "$explicit"
+  cp "$ORCH_CONFIG" "$work/.ganpan/orchestration.json"
+  cp "$ORCH_CONFIG" "$work/.claude/orchestration.json"
+
+  run bash -c 'export ORCH_CONFIG="$1"; cd "$2"; source "$3"; resolve_config_path' _ "$explicit" "$work" "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$explicit" ]
+}
+
+@test "resolve_config_path prefers .ganpan over .claude when ORCH_CONFIG unset" {
+  work="$BATS_TEST_TMPDIR/proj"
+  mkdir -p "$work/.ganpan" "$work/.claude"
+  cp "$ORCH_CONFIG" "$work/.ganpan/orchestration.json"
+  cp "$ORCH_CONFIG" "$work/.claude/orchestration.json"
+
+  run bash -c 'unset ORCH_CONFIG; cd "$1"; source "$2"; resolve_config_path' _ "$work" "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "./.ganpan/orchestration.json" ]
+}
+
+@test "load_config exports ORCH_CONFIG_PATH for the selected config" {
+  work="$BATS_TEST_TMPDIR/proj"
+  mkdir -p "$work/.ganpan"
+  cp "$ORCH_CONFIG" "$work/.ganpan/orchestration.json"
+
+  run bash -c 'unset ORCH_CONFIG; cd "$1"; source "$2"; load_config; echo "$ORCH_CONFIG_PATH|$REPO"' _ "$work" "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "./.ganpan/orchestration.json|o/r" ]
+}

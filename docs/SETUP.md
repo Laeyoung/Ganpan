@@ -1,4 +1,4 @@
-# Orchestration v1 — one-time setup
+# Ganpan orchestration — one-time setup
 
 ## Prerequisites
 `gh`, `git`, `jq`, `yq`, `bats` (for tests). Verify: `command -v gh jq yq git bats`.
@@ -13,20 +13,42 @@
    branch protection).
 
 ## Install (copy-in — alternative)
-Run `./install.sh <target-repo-path>` from a ganpan checkout. Then complete the
-same human checklist below.
+Run `./install.sh <target-repo-path>` from a ganpan checkout. By default this
+installs the Claude copy-in surface. Then complete the same human checklist
+below.
+
+## Install (Codex repo-local skills — Phase 1 MVP)
+Run:
+
+```bash
+./install.sh <target-repo-path> --target codex
+```
+
+This installs `.agents/skills/ganpan-*`, `AGENTS.md` conventions,
+`scripts/orchestration/*.sh`, GitHub labels/templates, and a new
+`.ganpan/orchestration.json` only when no existing Ganpan config exists. If the
+target already has only `.claude/orchestration.json`, Ganpan keeps using that
+legacy fallback and does not silently create a second config.
+
+To install both Claude and Codex surfaces:
+
+```bash
+./install.sh <target-repo-path> --target both
+```
+
+New `--target both` installs create `.ganpan/orchestration.json` and do not
+create `.claude/orchestration.json` unless a legacy config already exists.
 
 ### Upgrading a copy-in install
 `install.sh` re-run upgrades files whose version sentinel differs. **v1 files
 predate the sentinel**, so the first upgrade off a v1 copy must use
 `./install.sh <target> --force` (overwrite + stamp regardless), or delete the
-old `scripts/orchestration/` + `.claude/commands/` first. Subsequent upgrades
-are automatic.
+old generated surface files first. Subsequent upgrades are automatic.
 
 ## Steps
 1. **Bot account + Fine-grained PAT.** Permissions on the target repo only: Contents RW, Pull requests RW, Issues RW, Projects RW. Expiry 90d. Export `GH_TOKEN=github_pat_...` (do not use `--with-token`). Use HTTPS (`gh auth` over ssh breaks fine-grained tokens).
 2. **Add the bot as a collaborator** on the target repo.
-3. **Config:** `/orch-setup` (plugin) writes `.claude/orchestration.json` and fills `repo`/`bot` from its argument. `install.sh` (copy-in) only drops the **template** if absent — you must then manually edit `.claude/orchestration.json` to set `repo`, `bot`, and (optionally) `project.number`.
+3. **Config:** discovery order is `$ORCH_CONFIG`, `.ganpan/orchestration.json`, then `.claude/orchestration.json`. `/orch-setup` (Claude plugin) writes the Claude config path. `install.sh --target codex` writes `.ganpan/orchestration.json` for new installs. `install.sh` only drops a **template** if no config exists — you must then manually edit it to set `repo`, `bot`, and (optionally) `project.number`.
 4. **Labels** are bootstrapped by `/orch-setup`. For the copy-in path run `scripts/orchestration/bootstrap-labels.sh .github/labels.yml`.
 5. **(Optional) GitHub Project:** create it, set `project.number`; otherwise leave `null` (sync becomes a no-op).
 6. **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, no direct push, **include administrators**, restrict review dismissal. Bot token must **not** be admin.
@@ -38,6 +60,22 @@ are automatic.
 - Coder:   `/loop /work-issue`
 - Reviewer:`/loop 5m /review-queue`
 - QA:      `/goal` wrapping `/qa-check` (see `.claude/commands/qa-check.md`)
+
+For Codex repo-local skills, invoke the matching skill in the target repo:
+`ganpan-triage`, `ganpan-work-issue`, `ganpan-review-queue`, or
+`ganpan-qa-check`. Codex CLI/IDE support is the Phase 1 public surface; hosted
+or cloud-like Codex execution should not be assumed until `gh`, PATH, workspace,
+and secret provisioning behavior are verified for that environment.
+
+## Support matrix
+
+| Surface | Status | Primary UX |
+|---|---|---|
+| Claude Code plugin | first-class | `/ganpan:*` commands |
+| Copy-in Claude install | first-class fallback | `.claude/commands` + scripts |
+| Codex repo-local skills | Phase 1 MVP | `.agents/skills/ganpan-*` |
+| CLI runner | planned | `ganpan lane ...` |
+| Codex plugin | planned | Codex plugin install |
 
 ## Integration smoke test (manual)
 1. Open an issue (gets `status:triage`).
