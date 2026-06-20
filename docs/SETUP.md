@@ -52,6 +52,12 @@ example; run bare for a single sweep).
   `/loop /work-issue` running alongside `/run-all`.
 - **Run one instance.** Two concurrent `/loop … /run-all` double the worker pool —
   safe (the engine tolerates N racing workers) but double the WIP pressure.
+- **Interval ≥ sweep duration.** The launcher returns without waiting for the
+  spawned agents, so if a sweep outlasts the `/loop` interval the next tick starts
+  a fresh batch over the running one. The WIP gate caps concurrent Coder claims at
+  `wipLimit`, but overlapping Reviewer/QA agents can double-process the same issue
+  (wasted work / duplicate comments). Set the interval comfortably above a typical
+  sweep, especially for repos with long build/test.
 
 ## Integration smoke test (manual)
 1. Open an issue (gets `status:triage`).
