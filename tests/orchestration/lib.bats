@@ -79,7 +79,8 @@ JSON
 @test "perm_rank orders permissions" {
   run bash -c 'source "$0"
     [ "$(perm_rank admin)" -eq 4 ] && [ "$(perm_rank maintain)" -eq 3 ] \
-    && [ "$(perm_rank write)" -eq 2 ] && [ "$(perm_rank read)" -eq 0 ] \
+    && [ "$(perm_rank write)" -eq 2 ] && [ "$(perm_rank triage)" -eq 1 ] \
+    && [ "$(perm_rank read)" -eq 0 ] \
     && [ "$(perm_rank pull)" -eq 0 ] && [ "$(perm_rank none)" -eq -1 ] \
     && [ "$(perm_rank bogus)" -eq -1 ]' "$LIB"
   [ "$status" -eq 0 ]
@@ -125,6 +126,12 @@ JSON
   printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-requested: head=abc :: q"},{"author":{"login":"botx"},"body":"decision-resolved: done"}]}' > "$BATS_TEST_TMPDIR/v.json"
   run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
   [ "$output" = "no" ]
+}
+
+@test "bot_marker_pending: re-open after resolve → yes (latest marker wins)" {
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-resolved: prev cycle"},{"author":{"login":"botx"},"body":"decision-requested: head=def :: q2"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$output" = "yes" ]
 }
 
 @test "bot_marker_pending: non-bot marker ignored → no" {

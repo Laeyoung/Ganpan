@@ -49,7 +49,7 @@ ACTION=$(printf '%s' "$CLASSIFIED" \
 ```
 `ACTION ∈ {rework, proceed, followup, clarify}`. This only reflects *human answers*. Combine with your Step-A judgment using the priority **R-A > R-B > R-C > R-D**:
 
-1. **If Step A found a defect → R-A**, regardless of `ACTION`. If the PR is currently gated (`status:needs-decision` present), first close the gate: `gh issue comment "$N" --body "decision-resolved: superseded-by-rework" --repo "$REPO"`.
+1. **If Step A found a defect → R-A**, regardless of `ACTION`. (R-A closes an open gate itself — see below.)
 2. **Else if `ACTION == rework` → R-A.**
 3. **Else if `ACTION == followup` → R-C, then R-D.**
 4. **Else if `ACTION == proceed` → resolve gate then R-D.**
@@ -57,7 +57,7 @@ ACTION=$(printf '%s' "$CLASSIFIED" \
 6. **Else if `ACTION == clarify` (conflict or no classifiable answer) and the gate is open → keep waiting** (post `decision-clarify:` only if a *new* conflict/unclassifiable answer arrived this tick; otherwise no-op).
 7. **Else → R-D.**
 
-Before R-B/R-D/R-C side effects, run the **re-entry guards** (Step E). 
+Before any routing action (R-A/R-B/R-C/R-D), run the **re-entry guards** (Step E) — they populate `$VIEW` and `$GATE_OPEN` that the routing blocks below consume.
 
 ### Step E — Re-entry guards (run before acting on a gated PR)
 
@@ -74,6 +74,12 @@ GATE_OPEN=$(printf '%s' "$VIEW" | bot_marker_pending "decision-requested:" "deci
 ```bash
 gh issue comment "$N" --body "rework-requested: <reasons>" --repo "$REPO"
 gh issue edit "$N" --add-label status:in-progress --remove-label status:in-review --repo "$REPO"
+# Close an open decision gate exactly once before reworking (§5.5: every resolution
+# emits decision-resolved:). Covers both a Step-A defect and a trusted "rework" answer
+# that supersedes the gate — without it the open decision-requested: is left dangling.
+if [ "${GATE_OPEN:-no}" = "yes" ]; then
+  gh issue comment "$N" --body "decision-resolved: superseded-by-rework" --repo "$REPO"
+fi
 gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO" 2>/dev/null || true
 # Invalidate a stale merge request so a fresh one is posted after rework (AC25):
 if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" = "yes" ]; then

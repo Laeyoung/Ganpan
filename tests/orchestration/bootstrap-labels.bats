@@ -29,7 +29,7 @@ setup() {
 }
 
 @test "bootstrap-labels creates status:needs-decision" {
-  run bash "$SCRIPT"
+  run bash "$SCRIPT" "$LABELS"
   [ "$status" -eq 0 ]
   grep -q 'label create status:needs-decision' "$GH_CALLS"
 }
