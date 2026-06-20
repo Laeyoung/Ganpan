@@ -73,6 +73,20 @@ setup() {
   [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "3" ]
 }
 
+@test "decision-resolved: resets the cutoff (stale pre-resolution answer dropped, post-resolution rework kept)" {
+  # gate resolved 'proceed' at T1; the pre-resolution proceed answer (T0) must NOT linger,
+  # so a fresh trusted rework (T2) is the only surviving answer (no proceed+rework→clarify contamination).
+  queue_response '[
+    {"id":1,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","body":"그대로 진행"},
+    {"id":2,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"decision-resolved: proceed"},
+    {"id":3,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"수정 필요"}
+  ]'
+  queue_response '[]'
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "3" ]
+}
+
 @test "API failure on issue comments → exit 1" {
   export GH_FAIL_MATCH='issues/5/comments'
   run bash "$SCRIPT" 5 9

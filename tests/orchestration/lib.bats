@@ -108,6 +108,14 @@ JSON
   [ "$status" -eq 1 ]
 }
 
+@test "is_trusted: invalid threshold fails closed (rejects read collaborator)" {
+  # A mistyped permissionThreshold (perm_rank → -1) must NOT fall open to read/pull.
+  printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"wirte","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
+  queue_response 'read'
+  run bash -c 'source "$0"; load_config; is_trusted eve' "$LIB"
+  [ "$status" -eq 1 ]
+}
+
 @test "is_trusted: API failure is untrusted" {
   printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
   export GH_FAIL_MATCH='collaborators'

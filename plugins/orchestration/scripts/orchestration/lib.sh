@@ -73,7 +73,10 @@ is_trusted() {
   perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 1
   have=$(perm_rank "$perm")
   need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
-  [ "$have" -ge 0 ] && [ "$have" -ge "$need" ]
+  # Fail closed: a mistyped threshold (need<0, perm_rank returns -1) or an unknown
+  # permission (have<0) must reject — never fall open to read/pull. need<0 checked first
+  # so a config typo cannot grant trust to a low-privilege collaborator.
+  [ "$need" -ge 0 ] && [ "$have" -ge 0 ] && [ "$have" -ge "$need" ]
 }
 
 # bot_marker_pending <openPrefix> <resolvePrefix> — reads a {comments:[...]} JSON on

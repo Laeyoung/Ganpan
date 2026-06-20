@@ -15,12 +15,15 @@ issue="$1"; pr="$2"
 icmts=$(gh api "repos/$REPO/issues/$issue/comments" --paginate | jq -s 'add // []') || { log ERROR "issue comments failed"; exit 1; }
 pcmts=$(gh api "repos/$REPO/issues/$pr/comments" --paginate | jq -s 'add // []')     || { log ERROR "pr comments failed"; exit 1; }
 
-# cutoff = created_at of the latest bot reference marker on the ISSUE. Per spec §4, "new
-# trusted input" is measured after the latest of rework-requested:/decision-requested:/
-# decision-clarify: — all three must reset the window (rework-requested: matters on a
-# rework→re-review cycle, so pre-rework answers do not leak back in).
+# cutoff = created_at of the latest bot gate-lifecycle marker on the ISSUE. Per spec §4,
+# "new trusted input" is measured after the latest of rework-requested: / decision-requested:
+# / decision-clarify: / decision-resolved: — all must reset the window:
+#  - rework-requested: matters on a rework→re-review cycle (no pre-rework leak),
+#  - decision-resolved: matters after a gate closes (terminal) so a stale pre-resolution
+#    answer (e.g. an old "proceed") cannot linger and contaminate a later trusted "rework"
+#    into a spurious proceed+rework→clarify; only post-resolution answers count.
 cutoff=$(echo "$icmts" | jq -r --arg b "$BOT" '
-  [.[] | select(.user.login==$b and ((.body|startswith("rework-requested:")) or (.body|startswith("decision-requested:")) or (.body|startswith("decision-clarify:")))) | .created_at]
+  [.[] | select(.user.login==$b and ((.body|startswith("rework-requested:")) or (.body|startswith("decision-requested:")) or (.body|startswith("decision-clarify:")) or (.body|startswith("decision-resolved:")))) | .created_at]
   | (max // "1970-01-01T00:00:00Z")')
 
 # Merge issue + PR comments, tag source, drop bot-authored, keep created_at > cutoff.
