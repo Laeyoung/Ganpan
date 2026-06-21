@@ -5,6 +5,7 @@ setup() {
   setup_gh_stub
   export ORCH_CONFIG="$BATS_TEST_TMPDIR/orchestration.json"
   printf '{"repo":"o/r","bot":"botx","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
+  export GH_STUB_LOGIN=botx     # gh actor matches config.bot so the identity gate passes
   SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/reclaim.sh"
 }
 
@@ -103,4 +104,15 @@ setup() {
   run bash "$SCRIPT"
   [ "$status" -eq 0 ]
   grep -q 'issue edit 12 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
+}
+
+@test "actor mismatch → aborts before any write" {
+  export GH_STUB_LOGIN=intruder
+  queue_response '[{"number":6}]'                                                                # would be reclaimed without the gate
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'
+  queue_response '[]'
+  run bash "$SCRIPT"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted
+  ! grep -q 'issue edit' "$GH_CALLS"
 }

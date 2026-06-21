@@ -12,7 +12,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 ```
 
 ## Layout
-- `plugins/orchestration/commands/` — lane commands (triage, work-issue, review-queue, qa-check, orch-setup).
+- `plugins/orchestration/commands/` — lane commands (triage, work-issue, review-queue, qa-check, orch-setup) plus `run-all` (fan-out launcher that spawns all four lanes as background agents).
 - `plugins/orchestration/scripts/orchestration/` — engine shell scripts.
 - `plugins/orchestration/assets/` — files copied into target repos (config template, labels, issue template, CLAUDE.md).
 - `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`).

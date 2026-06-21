@@ -153,3 +153,47 @@ JSON
   run bash -c 'source "$0"; BOT=botx; bot_marker_pending "merge-requested:" "merge-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
   [ "$output" = "no" ]
 }
+
+@test "require_bot_actor passes when gh actor == config.bot" {
+  export GH_STUB_LOGIN=botx
+  run bash -c 'source "$0"; load_config; require_bot_actor' "$LIB"
+  [ "$status" -eq 0 ]
+}
+
+@test "require_bot_actor fails (with message) when actor != bot" {
+  export GH_STUB_LOGIN=intruder
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]
+}
+
+@test "require_bot_actor fails when config.bot is empty" {
+  printf '%s' '{"repo":"o/r","bot":"","candidateN":3,"wipLimit":4,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
+  export GH_STUB_LOGIN=botx
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"config.bot is empty"* ]]
+}
+
+@test "require_bot_actor fails when gh returns an empty login" {
+  export GH_STUB_LOGIN=
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"empty login"* ]]
+}
+
+@test "require_bot_actor fails when gh api user errors (unresolvable identity)" {
+  export GH_STUB_LOGIN=botx
+  export GH_EXIT=1
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"cannot resolve gh identity"* ]]
+}
+
+@test "ORCH_SKIP_ACTOR_CHECK=1 short-circuits without calling gh" {
+  export ORCH_SKIP_ACTOR_CHECK=1
+  export GH_STUB_LOGIN=intruder
+  run bash -c 'source "$0"; load_config; require_bot_actor' "$LIB"
+  [ "$status" -eq 0 ]
+  ! grep -q 'api user' "$GH_CALLS"
+}

@@ -15,10 +15,14 @@ setup() {
   [ -f "$TARGET/.claude/orchestration.json" ]
 }
 
-@test "copied commands have zero CLAUDE_PLUGIN_ROOT residue (path-drift guard)" {
+@test "copied commands have zero CLAUDE_PLUGIN_ROOT path residue (path-drift guard)" {
   run bash "$REPO_ROOT/install.sh" "$TARGET"
   [ "$status" -eq 0 ]
-  run grep -rl CLAUDE_PLUGIN_ROOT "$TARGET/.claude/commands" "$TARGET/scripts/orchestration"
+  # Guard the PATH form `${CLAUDE_PLUGIN_ROOT}/...` (what the sed rewrite targets),
+  # not the bare token: run-all.md intentionally keeps a bare ${CLAUDE_PLUGIN_ROOT}
+  # for install-mode detection + agent-preamble prose, which has no trailing slash
+  # and is correct to retain.
+  run grep -rl 'CLAUDE_PLUGIN_ROOT}/' "$TARGET/.claude/commands" "$TARGET/scripts/orchestration"
   [ "$status" -ne 0 ]   # grep -l exits non-zero when there are no matches
 }
 
@@ -31,6 +35,16 @@ setup() {
   [ "$output" = "1" ]
   # the .md sentinel must be an HTML comment, not a Markdown heading
   run grep -q '<!-- ganpan-orchestration:' "$TARGET/.claude/commands/work-issue.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "run-all launcher command is installed and stamped" {
+  run bash "$REPO_ROOT/install.sh" "$TARGET"
+  [ "$status" -eq 0 ]
+  [ -f "$TARGET/.claude/commands/run-all.md" ]
+  run grep -c 'ganpan-orchestration:' "$TARGET/.claude/commands/run-all.md"
+  [ "$output" = "1" ]
+  run grep -q '<!-- ganpan-orchestration:' "$TARGET/.claude/commands/run-all.md"
   [ "$status" -eq 0 ]
 }
 

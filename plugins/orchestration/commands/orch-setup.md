@@ -10,6 +10,10 @@ Do exactly this:
    ```bash
    command -v gh jq yq || { echo "missing prerequisite (need gh, jq, yq)"; exit 1; }
    gh auth status || { echo "gh not authenticated — run: GH_TOKEN=... or gh auth login"; exit 1; }
+   actor=$(gh api user --jq .login 2>/dev/null)
+   echo "ⓘ gh is currently acting as: ${actor:-<unknown>}"
+   echo "  After creating the bot PAT, run lanes with:  export GH_TOKEN=github_pat_..."
+   echo "  (must resolve to the bot account — NOT '${actor:-your personal login}')"
    ```
 2. **Config (guarded — binary, per spec §3.4).** If `./.claude/orchestration.json` already exists, **leave it untouched and report**. Only when it is absent: copy the template and fill `repo`/`bot` (from the `owner/repo` argument or by asking) — both happen inside the same absent-branch, so an existing config is never rewritten:
    ```bash
@@ -41,13 +45,13 @@ Do exactly this:
      || { echo "setup incomplete — label bootstrap failed; fix gh auth and re-run /orch-setup"; exit 1; }
    ```
 5. **Manual-steps checklist (print — do NOT attempt to automate).** Tell the human to:
-   - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh).
+   - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh). **This is a runtime precondition, not a recommendation** — every lane verifies `gh` is acting as `config.bot` at startup and hard-stops on mismatch.
    - **Add the bot as a collaborator** on the repo.
    - **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, include administrators; the bot must **not** be an admin.
 6. **Verify (optional).** Confirm labels exist and echo the lane-run commands:
    ```bash
    gh label list --repo "$(jq -r .repo .claude/orchestration.json)" | grep -c '^status:' || true
    ```
-   Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`).
+   Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`) — or run all four at once from one session with `/loop 20m /run-all` (the launcher; `20m` is an adjustable example).
 
 Never create the PAT or change branch protection yourself — those are human, security-sensitive actions.

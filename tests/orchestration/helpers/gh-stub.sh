@@ -12,6 +12,15 @@ echo "$*" >> "$GH_CALLS"
 if [ -n "${GH_FAIL_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_FAIL_MATCH"; then
   exit 1
 fi
+# `gh api user` (the actor-identity probe) — emit a configurable login WITHOUT
+# consuming a queued-response slot. Standalone case BEFORE the queue-emitting one;
+# 3-word expansion so "api user "* matches `gh api user --jq .login`.
+# `-` (not `:-`): GH_STUB_LOGIN set-but-empty yields an empty login, for the
+# "empty login" gate test. Must precede the read-api clause below, which would
+# otherwise consume a queue slot for `gh api user`.
+case "${1:-} ${2:-} ${3:-}" in
+  "api user "*) echo "${GH_STUB_LOGIN-bot-login}"; exit "${GH_EXIT:-0}" ;;
+esac
 # Read-style `gh api` (GET): emit the next queued response. Write `api` (-X/--method
 # POST|PUT|PATCH|DELETE) is left to fall through and must NOT consume a slot.
 if [ "${1:-}" = "api" ] && ! printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](POST|PUT|PATCH|DELETE)'; then
