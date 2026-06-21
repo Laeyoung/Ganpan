@@ -6,6 +6,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$DIR/lib.sh"
 load_config
+require_bot_actor || exit 1
 
 issue="${1:?issue number required}"
 view=$(gh issue view "$issue" --json comments --repo "$REPO") || { log ERROR "view failed"; exit 1; }

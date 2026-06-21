@@ -77,7 +77,7 @@ ganpan 체크아웃에서 대상 레포로 파일을 직접 복사합니다:
 
 `/ganpan:orch-setup`이 자동화하지 못하는 부분(체크리스트로 안내됨):
 
-1. **봇 계정 + Fine-grained PAT** — 대상 레포에만 Contents RW / Pull requests RW / Issues RW / Projects RW, 만료 90일. `GH_TOKEN=github_pat_...`로 export(HTTPS 사용; `--with-token` 금지).
+1. **봇 계정 + Fine-grained PAT** — 대상 레포에만 Contents RW / Pull requests RW / Issues RW / Projects RW, 만료 90일. `GH_TOKEN=github_pat_...`로 export(HTTPS 사용; `--with-token` 금지). **이는 권장이 아니라 실행 전제조건입니다** — 레인은 시작 시 `gh` 행위 주체가 `config.bot`과 일치하는지 확인하고, 일치하지 않으면(예: `GH_TOKEN` 미설정 → 개인 계정으로 폴백) 즉시 중단합니다. (CI 등 봇 PAT가 곧 주체임이 확실한 경우에만 호출 단위로 `ORCH_SKIP_ACTOR_CHECK=1`을 쓸 수 있으며, 전역 export는 금지.)
 2. **봇을 대상 레포 협업자로 추가.**
 3. **(선택) GitHub Project** 생성 후 `project.number` 설정 — 없으면 `null`로 두면 sync는 no-op.
 4. **`main` 브랜치 보호** — 사람 리뷰 1회 필수, force-push·직접 push 금지, **관리자 포함**, 리뷰 dismissal 제한. 봇 토큰은 admin이면 안 됨.

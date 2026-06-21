@@ -27,3 +27,15 @@ setup() {
   run grep -c 'label create .* --force' "$GH_CALLS"
   [ "$output" -eq 7 ]
 }
+
+@test "is NOT actor-gated — runs under /orch-setup before the bot PAT exists (spec §4.3)" {
+  # config.bot is "b" (setup) and GH_STUB_LOGIN is unset → the stub would report
+  # the default login "bot-login" (≠ "b"). If require_bot_actor were ever added here,
+  # the gate would call `gh api user` and abort on the mismatch. Assert it does neither:
+  # bootstrap must succeed as whoever runs setup (often the human, pre-PAT).
+  run bash "$SCRIPT" "$LABELS"
+  [ "$status" -eq 0 ]
+  ! grep -q 'api user' "$GH_CALLS"          # never probes identity == never gated
+  run grep -c '^label create' "$GH_CALLS"
+  [ "$output" -eq 7 ]
+}
