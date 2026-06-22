@@ -81,15 +81,21 @@ perm_rank() {
   esac
 }
 
-# is_trusted <login> — exit 0 if trusted, 1 otherwise. Allowlist OR permission threshold.
+# is_trusted <login> — tri-state. exit 0 trusted | 1 definitively untrusted | 2 lookup
+# failed (transient API error / missing account). Allowlist OR permission threshold.
 # Queried at call time (== conversion time) so a user who lost access is no longer trusted.
+# Security callers using `if is_trusted` still fail closed (1 and 2 are both non-zero).
+# The distinct 2 lets a collector (trusted-answers.sh) tell a transient failure apart from
+# a real "untrusted" and skip the tick instead of silently dropping an answer — note an
+# ordinary non-collaborator returns 200/"none" (rank -1 → return 1 below), so a non-zero
+# `gh api` exit here is a genuine request failure, not merely "no access".
 is_trusted() {
   local user="$1"
   if [ -n "${REVIEWER_ALLOWLIST:-}" ] && printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qxF -- "$user"; then
     return 0
   fi
   local perm have need
-  perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 1
+  perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 2
   have=$(perm_rank "$perm")
   need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
   # Fail closed: a mistyped threshold (need<0, perm_rank returns -1) or an unknown

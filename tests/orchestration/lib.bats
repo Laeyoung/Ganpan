@@ -116,11 +116,13 @@ JSON
   [ "$status" -eq 1 ]
 }
 
-@test "is_trusted: API failure is untrusted" {
+@test "is_trusted: lookup failure returns 2 (transient), distinct from untrusted" {
+  # A failed permission API call must NOT be reported as a definitive "untrusted" (1):
+  # callers still fail closed (2 is non-zero) but a collector can tell it apart and retry.
   printf '%s' '{"repo":"o/r","bot":"botx","candidateN":5,"wipLimit":5,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3}}' > "$ORCH_CONFIG"
   export GH_FAIL_MATCH='collaborators'
   run bash -c 'source "$0"; load_config; is_trusted mallory' "$LIB"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 2 ]
 }
 
 @test "bot_marker_pending: open marker with no resolve → yes" {

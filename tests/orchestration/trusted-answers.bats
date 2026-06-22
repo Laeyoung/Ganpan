@@ -19,11 +19,25 @@ setup() {
     {"id":4,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","body":"오래된 코멘트"}
   ]'                                   # GET issues/5/comments
   queue_response '[]'                  # GET issues/9/comments (PR conversation)
-  export GH_FAIL_MATCH='collaborators/mallory'   # mallory lookup → untrusted
+  queue_response 'read'                # collaborators/mallory/permission → below threshold (untrusted)
   run bash "$SCRIPT" 5 9
   [ "$status" -eq 0 ]
   ids=$(echo "$output" | jq -r '[.[].id] | sort | @csv')
   [ "$ids" = "2" ]                     # only carol's post-cutoff answer
+}
+
+@test "transient trust-lookup failure aborts the tick (never drops a trusted answer)" {
+  # dave is not allowlisted, so is_trusted hits the permission API; a transient failure
+  # must skip the issue (exit 1) instead of silently classifying dave as untrusted and
+  # dropping his answer — which, once a resolution marker advances the cutoff, is lost.
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"decision-requested: head=abc :: q"},
+    {"id":2,"user":{"login":"dave"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"수정 필요"}
+  ]'
+  queue_response '[]'
+  export GH_FAIL_MATCH='collaborators/dave'   # permission lookup fails (transient)
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 1 ]
 }
 
 @test "edited answer carries edited=true" {

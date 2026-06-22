@@ -32,14 +32,22 @@ candidates=$(jq -n --argjson i "$icmts" --argjson p "$pcmts" --arg b "$BOT" --ar
   | map(select(.user.login != $b and (.created_at > $cut)))
   | map({id:.id, author:.user.login, createdAt:.created_at, edited:(.updated_at != .created_at), body:.body, source:.source})')
 
-# Trust filter: keep only authors that pass is_trusted (queried now == conversion time).
-result='[]'
-while IFS= read -r row; do
-  [ -z "$row" ] && continue
-  author=$(echo "$row" | jq -r '.author')
-  if is_trusted "$author"; then
-    result=$(jq -c --argjson r "$row" '. + [$r]' <<<"$result")
-  fi
-done < <(echo "$candidates" | jq -c '.[]')
+# Trust filter: resolve each DISTINCT author exactly once (queried now == conversion
+# time), then keep every answer whose author is trusted. Per-author (not per-row) so a
+# transient permission-lookup failure can never keep some of one author's answers while
+# dropping others — a partial set could flip decision-resolve to a wrong single-bucket
+# action, and once a resolution marker advances the cutoff the dropped answer is lost for
+# good. A lookup error (is_trusted rc 2) aborts the tick so the lane retries cleanly,
+# rather than treating the author as untrusted and silently discarding a real answer.
+trusted='[]'
+while IFS= read -r author; do
+  [ -z "$author" ] && continue
+  rc=0; is_trusted "$author" || rc=$?
+  case "$rc" in
+    0) trusted=$(jq -c --arg a "$author" '. + [$a]' <<<"$trusted") ;;
+    2) log ERROR "trust lookup failed for '$author' — skipping this issue this tick"; exit 1 ;;
+    *) : ;;   # 1 → definitively untrusted → drop
+  esac
+done < <(echo "$candidates" | jq -r '[.[].author] | unique | .[]')
 
-echo "$result"
+jq -c --argjson t "$trusted" 'map(select(.author | IN($t[])))' <<<"$candidates"
