@@ -124,3 +124,80 @@ setup() {
   [ "$(echo "$output" | jq -r '.[0].id')" = "8" ]
   [ "$(echo "$output" | jq -r '.[0].source')" = "pr" ]
 }
+
+@test "answer at exactly the cutoff second is dropped (strict > boundary)" {
+  # carol's answer shares the bot marker's second; strict `> cut` must exclude it.
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"decision-requested: head=abc :: q"},
+    {"id":2,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"수정 필요"}
+  ]'
+  queue_response '[]'
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+@test "one author's multiple post-cutoff answers are all kept (single trust decision)" {
+  # Per-author (not per-row) trust: carol's two answers must both survive together.
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"decision-requested: head=abc :: q"},
+    {"id":2,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"진행"},
+    {"id":3,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:03Z","updated_at":"2026-01-01T00:00:03Z","body":"역시 수정"}
+  ]'
+  queue_response '[]'
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "2,3" ]
+}
+
+@test "all candidates untrusted → emits [] and exit 0" {
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"decision-requested: head=abc :: q"},
+    {"id":2,"user":{"login":"dave"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"진행"}
+  ]'
+  queue_response '[]'
+  queue_response 'read'                # collaborators/dave/permission → below threshold
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+@test "cutoff marker in the issue thread also drops a pre-cutoff PR-conversation answer" {
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:05Z","updated_at":"2026-01-01T00:00:05Z","body":"decision-requested: head=abc :: q"}
+  ]'
+  queue_response '[
+    {"id":8,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"PR 스레드 오래된 답변"}
+  ]'
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+@test "mixed authors in one run: trusted kept, untrusted dropped" {
+  # carol (allowlisted, no API call) survives; dave (API → 'read') is dropped — verifies
+  # the per-author loop keeps/drops each author independently, not all-or-nothing.
+  queue_response '[
+    {"id":1,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"decision-requested: head=abc :: q"},
+    {"id":2,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:02Z","updated_at":"2026-01-01T00:00:02Z","body":"수정 필요"},
+    {"id":3,"user":{"login":"dave"},"created_at":"2026-01-01T00:00:03Z","updated_at":"2026-01-01T00:00:03Z","body":"진행"}
+  ]'
+  queue_response '[]'
+  queue_response 'read'                # collaborators/dave/permission → below threshold
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "2" ]
+}
+
+@test "a bot gate marker in the PR thread does not raise the cutoff (issue-thread only)" {
+  # Gate markers are issue-scoped; a decision-requested: posted only to the PR conversation
+  # must NOT shift the window, so a pre-marker trusted answer is still returned.
+  queue_response '[]'                  # GET issues/5/comments (issue thread — no markers)
+  queue_response '[
+    {"id":2,"user":{"login":"carol"},"created_at":"2026-01-01T00:00:01Z","updated_at":"2026-01-01T00:00:01Z","body":"수정 필요"},
+    {"id":3,"user":{"login":"botx"},"created_at":"2026-01-01T00:00:05Z","updated_at":"2026-01-01T00:00:05Z","body":"decision-requested: head=abc :: q"}
+  ]'                                   # GET issues/9/comments (PR thread, incl. a bot marker)
+  run bash "$SCRIPT" 5 9
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r '[.[].id] | @csv')" = "2" ]
+}

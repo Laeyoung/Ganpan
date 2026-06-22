@@ -156,6 +156,13 @@ JSON
   [ "$output" = "no" ]
 }
 
+@test "bot_marker_pending: attacker open after bot resolve → no (forged marker ignored)" {
+  # The latest comment is an attacker-forged open marker; it must not reopen the gate.
+  printf '%s' '{"comments":[{"author":{"login":"botx"},"body":"decision-resolved: done"},{"author":{"login":"attacker"},"body":"decision-requested: head=evil :: q"}]}' > "$BATS_TEST_TMPDIR/v.json"
+  run bash -c 'source "$0"; BOT=botx; bot_marker_pending "decision-requested:" "decision-resolved:" < "$1"' "$LIB" "$BATS_TEST_TMPDIR/v.json"
+  [ "$output" = "no" ]
+}
+
 @test "require_bot_actor passes when gh actor == config.bot" {
   export GH_STUB_LOGIN=botx
   run bash -c 'source "$0"; load_config; require_bot_actor' "$LIB"

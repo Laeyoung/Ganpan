@@ -45,6 +45,30 @@ setup() {
   [ "$output" = "create" ]
 }
 
+@test "human-forged cap-exceeded does not count (bot-only) → create" {
+  # The cap-noted check filters by bot author; an attacker's cap-exceeded marker is ignored.
+  queue_response '{"comments":[{"author":{"login":"attacker"},"body":"cap-exceeded: comment-100 | manual create needed"}]}'
+  run bash "$SCRIPT" 5 comment-100
+  [ "$status" -eq 0 ]; [ "$output" = "create" ]
+}
+
+@test "ITEMKEY prefix-collision: an existing comment-1 marker does not match comment-10" {
+  # The trailing space in the startswith prefix ("followup-created: comment-1 ") is what
+  # keeps comment-1 from matching comment-10; lock that in so a separator change is caught.
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"followup-created: comment-1 → #11"}]}'
+  run bash "$SCRIPT" 5 comment-10
+  [ "$status" -eq 0 ]; [ "$output" = "create" ]
+}
+
+@test "cap boundary: count == cap-1 still creates (no premature cap-exceeded)" {
+  queue_response '{"comments":[
+    {"author":{"login":"botx"},"body":"followup-created: comment-1 → #11"},
+    {"author":{"login":"botx"},"body":"followup-created: comment-2 → #12"}
+  ]}'
+  run bash "$SCRIPT" 5 comment-100
+  [ "$status" -eq 0 ]; [ "$output" = "create" ]
+}
+
 @test "API failure → exit 1" {
   export GH_FAIL_MATCH='issue view'
   run bash "$SCRIPT" 5 comment-100

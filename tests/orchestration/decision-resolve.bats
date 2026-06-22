@@ -13,6 +13,7 @@ run_with() {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:00Z","bucket":"rework"}]}'
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r .action)" = "rework" ]
+  [ "$(echo "$output" | jq -r .reason)" = "first-bucket" ]   # success-path reason is part of the stdout contract
 }
 
 @test "single proceed → action proceed" {
@@ -42,6 +43,14 @@ run_with() {
   [ "$(echo "$output" | jq -r .action)" = "clarify" ]
 }
 
+@test "missing answers key ({}) → clarify, exit 0" {
+  # Distinct from null/[]: `.answers[]?` on an absent key is an empty stream, so the
+  # schema check passes vacuously and the main path yields no-classifiable-answer.
+  run_with '{}'
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .action)" = "clarify" ]
+}
+
 @test "first-bucket adoption: earliest classifiable wins (unclassifiable does not occupy)" {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:01Z","bucket":"unclassifiable"},{"createdAt":"2026-01-01T00:00:02Z","bucket":"rework"}]}'
   [ "$(echo "$output" | jq -r .action)" = "rework" ]
@@ -50,6 +59,7 @@ run_with() {
 @test "two same buckets → adopt, no conflict" {
   run_with '{"answers":[{"createdAt":"2026-01-01T00:00:01Z","bucket":"proceed"},{"createdAt":"2026-01-01T00:00:02Z","bucket":"proceed"}]}'
   [ "$(echo "$output" | jq -r .action)" = "proceed" ]
+  [ "$(echo "$output" | jq -r .reason)" = "first-bucket" ]
 }
 
 @test "conflict: rework then proceed → clarify" {
@@ -68,4 +78,10 @@ run_with() {
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r .action)" = "clarify" ]
   [ "$(echo "$output" | jq -r .reason)" = "schema-violation" ]
+}
+
+@test "conflict: followup then rework → clarify (any two distinct buckets conflict)" {
+  run_with '{"answers":[{"createdAt":"2026-01-01T00:00:01Z","bucket":"followup"},{"createdAt":"2026-01-01T00:00:02Z","bucket":"rework"}]}'
+  [ "$(echo "$output" | jq -r .action)" = "clarify" ]
+  [ "$(echo "$output" | jq -r .reason)" = "conflict" ]
 }
