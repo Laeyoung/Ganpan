@@ -57,6 +57,9 @@ setup() {
   run bash "$REPO_ROOT/install.sh" "$TARGET" --target codex
   [ "$status" -eq 0 ]
   [ -f "$TARGET/scripts/orchestration/claim.sh" ]
+  # stamp() rewrites the file inode via mktemp+mv; if it runs after chmod +x the
+  # exec bit is lost (PHASE1_DEV_LOG regression). Guard it on the codex codepath too.
+  [ -x "$TARGET/scripts/orchestration/detect-test-cmd.sh" ]
   [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
   [ -f "$TARGET/.agents/skills/ganpan-triage/SKILL.md" ]
   [ -f "$TARGET/.agents/skills/ganpan-review-queue/SKILL.md" ]
@@ -67,6 +70,10 @@ setup() {
   [ -f "$TARGET/AGENTS.md" ]
   [ -f "$TARGET/.ganpan/orchestration.json" ]
   [ -f "$TARGET/.github/labels.yml" ]
+  # Codex skills point at ./references/lanes/*.md; install.sh section 3 is
+  # unconditional, but gate it behind wants_claude by mistake and codex installs
+  # would silently ship skills whose references resolve to nothing.
+  [ -f "$TARGET/references/lanes/work-issue.md" ]
   [ ! -d "$TARGET/.claude/commands" ]
   [ ! -f "$TARGET/.claude/orchestration.json" ]
 }
@@ -76,6 +83,7 @@ setup() {
   [ "$status" -eq 0 ]
   [ -f "$TARGET/.claude/commands/work-issue.md" ]
   [ -f "$TARGET/.agents/skills/ganpan-work-issue/SKILL.md" ]
+  [ -f "$TARGET/references/lanes/work-issue.md" ]
   [ -f "$TARGET/.ganpan/orchestration.json" ]
   [ ! -f "$TARGET/.claude/orchestration.json" ]
 }

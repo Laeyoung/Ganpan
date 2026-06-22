@@ -12,9 +12,12 @@ JSON
 }
 
 @test "load_config exports expected vars" {
-  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER"' "$LIB"
+  # ORCH_CONFIG_PATH must echo the explicit $ORCH_CONFIG: detect-test-cmd.sh reads
+  # that var directly, so a regression that fails to export it for the explicit
+  # path would silently make the script read from an empty path.
+  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER|$ORCH_CONFIG_PATH"' "$LIB"
   [ "$status" -eq 0 ]
-  [ "$output" = "o/r|botx|3|4|120|15|null" ]
+  [ "$output" = "o/r|botx|3|4|120|15|null|$ORCH_CONFIG" ]
 }
 
 @test "load_config fails clearly when config missing" {
@@ -58,6 +61,18 @@ JSON
   run bash -c 'export ORCH_CONFIG="$1"; cd "$2"; source "$3"; resolve_config_path' _ "$explicit" "$work" "$LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "$explicit" ]
+}
+
+@test "resolve_config_path honors an explicit root arg independent of cwd (worktree contract)" {
+  # The wt-issue-<n> contract is CFG="$(resolve_config_path "$REPO_ROOT")" run from
+  # inside the worktree. cd to a dir with NO config so only the explicit $root arg
+  # can resolve it — drop the ${1:-.} default and this returns ./.ganpan instead.
+  work="$BATS_TEST_TMPDIR/proj"
+  mkdir -p "$work/.ganpan"
+  cp "$ORCH_CONFIG" "$work/.ganpan/orchestration.json"
+  run bash -c 'unset ORCH_CONFIG; cd "$1"; source "$2"; resolve_config_path "$3"' _ "$BATS_TEST_TMPDIR" "$LIB" "$work"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$work/.ganpan/orchestration.json" ]
 }
 
 @test "resolve_config_path prefers .ganpan over .claude when ORCH_CONFIG unset" {

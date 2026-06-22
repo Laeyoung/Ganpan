@@ -105,4 +105,17 @@ setup() {
     run yq e '.' "$target/.agents/skills/$name/agents/openai.yaml"
     [ "$status" -eq 0 ]
   done
+
+  # Existence alone would pass even if install copied an empty or wrong reference.
+  # Verify the installed reference body matches the shared source. stamp() appends
+  # a trailing blank line + sentinel comment, so compare only the first N lines
+  # (N = source line count) — head -n is portable, unlike `head -n -2`.
+  for lane in triage work-issue review-queue qa-check setup; do
+    src="$LANE_REFS/$lane.md"
+    installed="$target/.agents/skills/ganpan-$lane/references/$lane.md"
+    [ -f "$installed" ]
+    n=$(wc -l < "$src")
+    run diff "$src" <(head -n "$n" "$installed")
+    [ "$status" -eq 0 ]
+  done
 }
