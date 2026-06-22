@@ -102,6 +102,8 @@ Claude와 Codex surface를 함께 설치하려면:
 ./install.sh <대상-레포-경로> --target both
 ```
 
+설치 후 설정·라벨 부트스트랩·검증·레인 실행·트러블슈팅까지의 전체 절차는 **[`docs/CODEX_RUNBOOK.md`](docs/CODEX_RUNBOOK.md)** 를 따르세요.
+
 ---
 
 ## 셋업 이후 사람이 해야 할 일
