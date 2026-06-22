@@ -12,7 +12,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 ```
 
 ## Layout
-- `plugins/orchestration/commands/` — Claude lane commands (triage, work-issue, review-queue, qa-check, orch-setup).
+- `plugins/orchestration/commands/` — Claude lane commands (triage, work-issue, review-queue, qa-check, orch-setup) plus `run-all` (fan-out launcher that spawns all four lanes as background agents).
 - `plugins/orchestration/scripts/orchestration/` — engine shell scripts.
 - `plugins/orchestration/references/lanes/` — shared lane-protocol references (canonical; Codex skills copy these, Claude commands point at them).
 - `plugins/orchestration/assets/` — files copied into target repos (config template, labels, issue template, CLAUDE.md).

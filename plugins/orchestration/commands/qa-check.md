@@ -15,6 +15,12 @@ ORCH_CONFIG="$CFG" load_config
 
 Any script that calls `load_config` must receive `ORCH_CONFIG="$CFG"` after you step into a worktree.
 
+**Identity gate (run first, from the main repo root, before any `cd`):**
+```bash
+source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh" && load_config && require_bot_actor || exit 1
+```
+If this fails, **stop** and export the bot PAT (`export GH_TOKEN=github_pat_...`). (Plain `load_config` is correct here: the gate runs from the main repo root before this lane steps into any worktree, so cwd-relative config discovery resolves — same preamble as the other three lanes.)
+
 For each issue labelled `status:qa`:
 
 1. Get commands via `ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/detect-test-cmd.sh test` (and a regression run if applicable). **Run them and surface the full results in your output**.

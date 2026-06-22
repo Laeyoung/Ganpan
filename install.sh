@@ -162,12 +162,12 @@ info "references/lanes/*.md"
 
 # --- 4. lane commands (rewrite \${CLAUDE_PLUGIN_ROOT}/ -> ./ between copy and stamp; orch-setup.md excluded) ---
 if wants_claude; then
-  for name in work-issue triage review-queue qa-check; do
+  for name in work-issue triage review-queue qa-check run-all; do
     src="$PLUGIN/commands/$name.md"; dest="$TARGET/.claude/commands/$name.md"
     # shellcheck disable=SC2016  # ${CLAUDE_PLUGIN_ROOT} must not expand — it's a literal to strip
     needs_write "$dest" && { cp "$src" "$dest"; sed_i "$dest" 's|\${CLAUDE_PLUGIN_ROOT}/|./|g'; stamp "$dest"; }
   done
-  info ".claude/commands/{work-issue,triage,review-queue,qa-check}.md"
+  info ".claude/commands/{work-issue,triage,review-queue,qa-check,run-all}.md"
 fi
 
 # --- 5. Codex skills ----------------------------------------------------------
@@ -219,7 +219,7 @@ fi
 
 # --- next steps ---------------------------------------------------------------
 case "$TARGET_MODE" in
-  claude) CONFIG_PATH=".claude/orchestration.json"; LANE_HINT="/loop /ganpan:work-issue · /loop 10m /ganpan:triage · /loop 5m /ganpan:review-queue · /ganpan:qa-check" ;;
+  claude) CONFIG_PATH=".claude/orchestration.json"; LANE_HINT="/loop /ganpan:work-issue · /loop 10m /ganpan:triage · /loop 5m /ganpan:review-queue · /ganpan:qa-check · (all at once) /loop 20m /ganpan:run-all" ;;
   codex|both) CONFIG_PATH=".ganpan/orchestration.json"; LANE_HINT="Use Codex skills: ganpan-work-issue · ganpan-triage · ganpan-review-queue · ganpan-qa-check" ;;
 esac
 if [ -n "$SELECTED_CONFIG_PATH" ]; then

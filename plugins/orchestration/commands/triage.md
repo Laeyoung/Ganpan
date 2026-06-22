@@ -8,13 +8,15 @@ You are the **Triager** lane. Run from the main repo root.
 
 Shared lane reference: `${CLAUDE_PLUGIN_ROOT}/references/lanes/triage.md`. Read it as the canonical protocol before executing the Claude-specific commands below.
 
-Before running lane commands, resolve config once:
+Before running lane commands, resolve config once and verify the bot identity (from the main repo root, before any bot write):
 ```bash
 REPO_ROOT="$PWD"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh"
 CFG="$(resolve_config_path "$REPO_ROOT")"
 ORCH_CONFIG="$CFG" load_config
+require_bot_actor || exit 1
 ```
+If `require_bot_actor` fails, **stop** — `gh` is not acting as the configured bot. Export the bot PAT (`export GH_TOKEN=github_pat_...`) and re-run.
 
 1. **Reclaim sweep.** Run `ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/reclaim.sh` (reverts orphaned in-progress locks; skips unresolved-rework and open-PR cases).
 2. **Read triage queue.** `gh issue list --label status:triage --repo "$REPO"`.

@@ -69,6 +69,27 @@ For Codex repo-local skills, invoke the matching skill in the target repo:
 or cloud-like Codex execution should not be assumed until `gh`, PATH, workspace,
 and secret provisioning behavior are verified for that environment.
 
+### Running all lanes at once
+`/run-all` (`/ganpan:run-all` under a plugin install) is a fan-out launcher: each
+run spawns the four lanes as **background agents** (visible in `claude agents` /
+Agent View), each doing one bounded sweep then exiting. Wrap it in the scheduler
+for continuous operation — `/loop 20m /run-all` (the interval is an adjustable
+example; run bare for a single sweep). This launcher is a Claude Code surface;
+Codex drives each lane by invoking the matching skill directly.
+
+- **Single-cadence trade-off.** One outer interval flattens the per-lane cadences
+  (Triager 10m / Reviewer 5m / Coder self-paced). Coder loses the most — at most 3
+  cycles per tick (one issue each); for a deep backlog keep a dedicated
+  `/loop /work-issue` running alongside `/run-all`.
+- **Run one instance.** Two concurrent `/loop … /run-all` double the worker pool —
+  safe (the engine tolerates N racing workers) but double the WIP pressure.
+- **Interval ≥ sweep duration.** The launcher returns without waiting for the
+  spawned agents, so if a sweep outlasts the `/loop` interval the next tick starts
+  a fresh batch over the running one. The WIP gate caps concurrent Coder claims at
+  `wipLimit`, but overlapping Reviewer/QA agents can double-process the same issue
+  (wasted work / duplicate comments). Set the interval comfortably above a typical
+  sweep, especially for repos with long build/test.
+
 ## Support matrix
 
 | Surface | Status | Primary UX |

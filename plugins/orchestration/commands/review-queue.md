@@ -8,13 +8,15 @@ You are the **Reviewer** lane. Run from the main repo root. You **never** merge 
 
 Shared lane reference: `${CLAUDE_PLUGIN_ROOT}/references/lanes/review-queue.md`. Read it as the canonical protocol before executing the Claude-specific commands below.
 
-Before running lane commands, resolve config once:
+Before running lane commands, resolve config once and verify the bot identity (from the main repo root):
 ```bash
 REPO_ROOT="$PWD"
 source "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/lib.sh"
 CFG="$(resolve_config_path "$REPO_ROOT")"
 ORCH_CONFIG="$CFG" load_config
+require_bot_actor || exit 1
 ```
+If `require_bot_actor` fails, **stop** and export the bot PAT (`export GH_TOKEN=github_pat_...`).
 
 For each issue labelled `status:in-review` (find its PR via branch `issue-<n>` or the issue's PR link):
 

@@ -47,6 +47,25 @@ load_config() {
   export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
 }
 
+# require_bot_actor — assert the gh actor matches config.bot before any write.
+# Escape hatch: ORCH_SKIP_ACTOR_CHECK=1 (e.g. CI where the bot PAT *is* the actor).
+# Must be set per-invocation, never exported globally.
+require_bot_actor() {
+  [ "${ORCH_SKIP_ACTOR_CHECK:-}" = "1" ] && { log WARN "ORCH_SKIP_ACTOR_CHECK=1 — actor identity gate bypassed"; return 0; }
+  # jq -er in load_config rejects null but NOT an empty JSON string, so config.bot=""
+  # yields BOT=""; without this guard an empty actor would compare equal and pass.
+  [ -n "$BOT" ] || { log ERROR "config.bot is empty"; return 1; }
+  local actor
+  actor=$(gh api user --jq .login 2>/dev/null) \
+    || { log ERROR "cannot resolve gh identity (gh authenticated?)"; return 1; }
+  [ -n "$actor" ] || { log ERROR "gh api user returned empty login"; return 1; }
+  if [ "$actor" != "$BOT" ]; then
+    log ERROR "gh is acting as '$actor' but config.bot is '$BOT'."
+    log ERROR "Export the bot PAT first:  export GH_TOKEN=github_pat_...  (HTTPS, not ssh)"
+    return 1
+  fi
+}
+
 # Token sorts by time first (fixed-width ISO8601), then worker id → lexicographic-min == earliest.
 claim_token() { printf '%sZ-%s' "$(date -u +%Y-%m-%dT%H:%M:%S)" "$WORKER_ID"; }
 

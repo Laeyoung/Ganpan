@@ -5,6 +5,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$DIR/lib.sh"
 load_config
+require_bot_actor || exit 1
 
 list=$(gh issue list --label status:in-progress --json number --limit 1000 --repo "$REPO") || exit 1
 now=$(now_epoch)

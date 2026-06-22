@@ -24,6 +24,7 @@ status:qa          ── /qa-check ──▶ status:done   (실패 시 rework /
 | **Reviewer** | `/ganpan:review-queue` | `ganpan-review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
 | **QA** | `/ganpan:qa-check` | `ganpan-qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
 | **Setup** | `/ganpan:orch-setup` | `ganpan-setup` | 1회 셋업 (아래 참고) |
+| **통합 런처** | `/ganpan:run-all` | — | 4개 레인(Triager·Coder·Reviewer·QA)을 백그라운드 에이전트로 한 번에 병렬 1회 스윕 (Claude Code 전용) |
 
 > 플러그인 커맨드는 플러그인 이름으로 네임스페이싱됩니다. 정식 호출은 `/ganpan:triage`이며, 충돌이 없으면 짧은 `/triage`로도 호출됩니다.
 
@@ -110,7 +111,7 @@ Claude와 Codex surface를 함께 설치하려면:
 
 `/ganpan:orch-setup`이 자동화하지 못하는 부분(체크리스트로 안내됨):
 
-1. **봇 계정 + Fine-grained PAT** — 대상 레포에만 Contents RW / Pull requests RW / Issues RW / Projects RW, 만료 90일. `GH_TOKEN=github_pat_...`로 export(HTTPS 사용; `--with-token` 금지).
+1. **봇 계정 + Fine-grained PAT** — 대상 레포에만 Contents RW / Pull requests RW / Issues RW / Projects RW, 만료 90일. `GH_TOKEN=github_pat_...`로 export(HTTPS 사용; `--with-token` 금지). **이는 권장이 아니라 실행 전제조건입니다** — 레인은 시작 시 `gh` 행위 주체가 `config.bot`과 일치하는지 확인하고, 일치하지 않으면(예: `GH_TOKEN` 미설정 → 개인 계정으로 폴백) 즉시 중단합니다. (CI 등 봇 PAT가 곧 주체임이 확실한 경우에만 호출 단위로 `ORCH_SKIP_ACTOR_CHECK=1`을 쓸 수 있으며, 전역 export는 금지.)
 2. **봇을 대상 레포 협업자로 추가.**
 3. **(선택) GitHub Project** 생성 후 `project.number` 설정 — 없으면 `null`로 두면 sync는 no-op.
 4. **`main` 브랜치 보호** — 사람 리뷰 1회 필수, force-push·직접 push 금지, **관리자 포함**, 리뷰 dismissal 제한. 봇 토큰은 admin이면 안 됨.
@@ -126,6 +127,18 @@ Coder   :  /loop /ganpan:work-issue
 Reviewer:  /loop 5m /ganpan:review-queue
 QA      :  /goal 로 /ganpan:qa-check 래핑
 ```
+
+### 한 번에 실행 (통합 런처)
+
+`claude agents`(Agent View) 한 곳에서 4개 레인을 운영하려면:
+
+```text
+/loop 20m /ganpan:run-all      # 20m은 예시 — 조정 가능. bare 실행 시 1회 스윕
+```
+
+`/ganpan:run-all`은 매 틱마다 4개 레인을 **백그라운드 에이전트**로 띄워 각자 1회 스윕 후 종료합니다(Agent View에 함께 표시). 단일 인스턴스만 권장(2개 동시 실행 시 worker pool·WIP 압력 2배). Coder는 틱당 최대 3 사이클이라, **백로그가 깊으면** 전용 `/loop /ganpan:work-issue`를 함께 돌리세요.
+
+> ⚠️ **`/loop` 간격은 한 스윕 소요 시간보다 넉넉히** 잡으세요. 런처는 띄운 에이전트를 기다리지 않고 반환하므로, 스윕(특히 Coder의 긴 빌드/테스트)이 간격보다 오래 걸리면 다음 틱이 실행 중인 배치 위에 새 배치를 띄웁니다. Coder claim은 WIP 게이트로 `wipLimit`까지만 묶이지만, 겹친 Reviewer/QA는 같은 이슈를 중복 처리할 수 있습니다(중복 코멘트·낭비).
 
 ### 통합 스모크 테스트 (수동)
 
@@ -176,7 +189,7 @@ config discovery 순서:
 .claude-plugin/marketplace.json          # 마켓플레이스 매니페스트 (name: laeyoung)
 plugins/orchestration/
   ├─ .claude-plugin/plugin.json          # 플러그인 매니페스트 (name: ganpan)
-  ├─ commands/                           # 레인 커맨드 (triage / work-issue / ...)
+  ├─ commands/                           # 레인 커맨드 (triage / work-issue / ... / run-all)
   ├─ scripts/orchestration/              # 엔진 셸 스크립트 (claim, reclaim, lib, ...)
   ├─ references/lanes/                   # 공유 lane protocol reference
   └─ assets/                             # config 템플릿, labels.yml, 이슈 템플릿, CLAUDE.md
