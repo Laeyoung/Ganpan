@@ -1,6 +1,6 @@
 # Ganpan (간판)
 
-**GitHub-native 멀티 에이전트 오케스트레이션 툴킷** — Issues / PRs / 라벨을 단일 상태 머신으로 삼아, 여러 AI 에이전트가 **Triager → Coder → Reviewer → QA** 레인을 나눠 협업하도록 만드는 Claude Code 플러그인입니다.
+**GitHub-native 멀티 에이전트 오케스트레이션 툴킷** — Issues / PRs / 라벨을 단일 상태 머신으로 삼아, 여러 AI 에이전트가 **Triager → Coder → Reviewer → QA** 레인을 나눠 협업하도록 만드는 Claude Code + Codex 지원 툴킷입니다.
 
 별도의 큐나 DB 없이 GitHub 자체를 작업 보드로 사용합니다. 각 이슈는 `status:*` 라벨로 상태가 표현되고, 에이전트들은 라벨을 보고 자기 일을 집어가며, **머지는 항상 사람이** 합니다(branch protection으로 강제).
 
@@ -17,14 +17,14 @@ status:in-review   ── 사람이 머지 + /review-queue ──▶ status:qa
 status:qa          ── /qa-check ──▶ status:done   (실패 시 rework / blocked)
 ```
 
-| 레인 | 커맨드 | 역할 |
-|------|--------|------|
-| **Triager** | `/ganpan:triage` | 고아 락 회수(reclaim) 후 `status:triage` 이슈를 분류 → `agent-ready` 또는 `blocked` |
-| **Coder** | `/ganpan:work-issue` | `agent-ready` 이슈를 클레임 → worktree에서 구현 → PR 생성 → `in-review` |
-| **Reviewer** | `/ganpan:review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
-| **QA** | `/ganpan:qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
-| **Setup** | `/ganpan:orch-setup` | 1회 셋업 (아래 참고) |
-| **통합 런처** | `/ganpan:run-all` | 4개 레인(Triager·Coder·Reviewer·QA)을 백그라운드 에이전트로 한 번에 병렬 1회 스윕 |
+| 레인 | Claude Code | Codex Skill | 역할 |
+|------|-------------|-------------|------|
+| **Triager** | `/ganpan:triage` | `ganpan-triage` | 고아 락 회수(reclaim) 후 `status:triage` 이슈를 분류 → `agent-ready` 또는 `blocked` |
+| **Coder** | `/ganpan:work-issue` | `ganpan-work-issue` | `agent-ready` 이슈를 클레임 → worktree에서 구현 → PR 생성 → `in-review` |
+| **Reviewer** | `/ganpan:review-queue` | `ganpan-review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
+| **QA** | `/ganpan:qa-check` | `ganpan-qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
+| **Setup** | `/ganpan:orch-setup` | `ganpan-setup` | 1회 셋업 (아래 참고) |
+| **통합 런처** | `/ganpan:run-all` | — | 4개 레인(Triager·Coder·Reviewer·QA)을 백그라운드 에이전트로 한 번에 병렬 1회 스윕 (Claude Code 전용) |
 
 > 플러그인 커맨드는 플러그인 이름으로 네임스페이싱됩니다. 정식 호출은 `/ganpan:triage`이며, 충돌이 없으면 짧은 `/triage`로도 호출됩니다.
 
@@ -39,6 +39,16 @@ status:qa          ── /qa-check ──▶ status:done   (실패 시 rework /
 command -v gh jq yq git   # 모두 존재하는지 확인
 gh auth status            # 인증 확인 (HTTPS 권장)
 ```
+
+## 지원 표면
+
+| Surface | Status | Primary UX |
+|---|---|---|
+| Claude Code plugin | first-class | `/ganpan:*` commands |
+| Copy-in Claude install | first-class fallback | `.claude/commands` + scripts |
+| Codex repo-local skills | Phase 1 MVP | `.agents/skills/ganpan-*` |
+| CLI runner | planned | `ganpan lane ...` |
+| Codex plugin | planned | Codex plugin install |
 
 ---
 
@@ -71,6 +81,29 @@ ganpan 체크아웃에서 대상 레포로 파일을 직접 복사합니다:
 이 경우 config는 **템플릿만** 복사되므로, `.claude/orchestration.json`을 열어 `repo`·`bot`(필요 시 `project.number`)을 직접 채워야 합니다.
 
 **업그레이드:** `install.sh`를 다시 실행하면 버전 sentinel이 다른 파일만 갱신됩니다. v1(자동 sentinel 이전) 설치본에서 처음 올릴 때는 `./install.sh <대상> --force`를 쓰거나 기존 `scripts/orchestration/`·`.claude/commands/`를 먼저 지우세요.
+
+### 방법 C — Codex repo-local skills (Phase 1 MVP)
+
+Codex CLI/IDE가 대상 레포에서 repo-local skills를 읽도록 설치합니다:
+
+```bash
+./install.sh <대상-레포-경로> --target codex
+```
+
+설치되는 항목:
+- `.agents/skills/ganpan-*`
+- `AGENTS.md` Ganpan conventions block
+- `scripts/orchestration/*.sh`
+- `.ganpan/orchestration.json` 템플릿. 단, 기존 `.claude/orchestration.json`만 있으면 legacy fallback으로 두고 새 `.ganpan` config를 자동 생성하지 않습니다.
+- `.github/labels.yml` + issue template
+
+Claude와 Codex surface를 함께 설치하려면:
+
+```bash
+./install.sh <대상-레포-경로> --target both
+```
+
+설치 후 설정·라벨 부트스트랩·검증·레인 실행·트러블슈팅까지의 전체 절차는 **[`docs/CODEX_RUNBOOK.md`](docs/CODEX_RUNBOOK.md)** 를 따르세요.
 
 ---
 
@@ -117,7 +150,15 @@ QA      :  /goal 로 /ganpan:qa-check 래핑
 
 ---
 
-## 설정 (`.claude/orchestration.json`)
+## 설정 (`.ganpan/orchestration.json` 또는 `.claude/orchestration.json`)
+
+config discovery 순서:
+
+1. `$ORCH_CONFIG`
+2. `.ganpan/orchestration.json`
+3. `.claude/orchestration.json`
+
+새 Codex 설치는 `.ganpan/orchestration.json`을 사용합니다. 기존 Claude 설치는 `.claude/orchestration.json`을 계속 사용할 수 있습니다.
 
 ```jsonc
 {
@@ -150,7 +191,11 @@ plugins/orchestration/
   ├─ .claude-plugin/plugin.json          # 플러그인 매니페스트 (name: ganpan)
   ├─ commands/                           # 레인 커맨드 (triage / work-issue / ... / run-all)
   ├─ scripts/orchestration/              # 엔진 셸 스크립트 (claim, reclaim, lib, ...)
+  ├─ references/lanes/                   # 공유 lane protocol reference
   └─ assets/                             # config 템플릿, labels.yml, 이슈 템플릿, CLAUDE.md
+plugins/ganpan-codex/
+  ├─ skills/ganpan-*/                    # Codex repo-local skill source
+  └─ assets/AGENTS.md                    # Codex target repo conventions
 install.sh                               # copy-in 설치/업그레이드
 docs/SETUP.md                            # 상세 셋업 가이드
 tests/                                   # bats 테스트
@@ -165,3 +210,5 @@ tests/                                   # bats 테스트
 - Contents:write 봇은 `main` 이외 브랜치를 force-push·삭제할 수 있음.
 
 자세한 내용은 [`docs/SETUP.md`](docs/SETUP.md)를 참고하세요.
+
+Codex 전용 설치와 실행 절차는 [`docs/CODEX_RUNBOOK.md`](docs/CODEX_RUNBOOK.md)를 참고하세요. Phase 2/3 개발자는 [`docs/PHASE1_DEV_LOG.md`](docs/PHASE1_DEV_LOG.md)와 [`docs/CODEX_ADAPTER_RULES.md`](docs/CODEX_ADAPTER_RULES.md)를 먼저 확인하세요.
