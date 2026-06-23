@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extend the Ganpan `review-queue` (Reviewer) lane to read permission-gated human PR/issue comments and route each in-review PR to exactly one of four outcomes (R-A rework / R-B decision-gate / R-C follow-up issue / R-D merge-request), per `docs/superpowers/specs/ganpan-review-queue-redesign.md`.
+**Goal:** Extend the Ganpan `review-queue` (Reviewer) lane to read permission-gated human PR/issue comments and route each in-review PR to exactly one of four outcomes (R-A rework / R-B decision-gate / R-C follow-up issue / R-D merge-request), per `docs/superpowers/specs/2026-06-19-review-queue-redesign.md`.
 
 **Architecture:** The lane stays an agent-driven command (`review-queue.md`), but every *deterministic* decision — trust judgment, answer adoption/conflict, marker idempotency, follow-up dedup/cap, trusted-answer collection — is factored into bash scripts + `lib.sh` functions and covered by bats, mirroring the existing `claim.sh`/`reclaim.sh` pattern. Only the *LLM-judgment* steps (self-review of the diff, classifying each trusted answer into a bucket) live in the command prose, which calls the scripts to make the actual state transitions. GitHub issue comments authored by the bot are the only authoritative state markers (existing invariant, extended with new marker prefixes).
 
@@ -47,7 +47,7 @@
 
 **Docs**
 - `plugins/orchestration/assets/CLAUDE.md` — note the new lane behavior for deployed repos.
-- `docs/superpowers/specs/ganpan-review-queue-redesign.md` — append an AC→implementation traceability table.
+- `docs/superpowers/specs/2026-06-19-review-queue-redesign.md` — append an AC→implementation traceability table.
 
 **Marker grammar (normative for this plan — bot-authored only):**
 - `decision-requested: head=<sha7> :: <question + recommendation>`
@@ -1095,7 +1095,7 @@ git commit -m "feat(orch): rewrite review-queue with 4-way routing and decision 
 
 **Files:**
 - Modify: `plugins/orchestration/assets/CLAUDE.md` (deployed conventions — add lane note)
-- Modify: `docs/superpowers/specs/ganpan-review-queue-redesign.md` (append traceability table)
+- Modify: `docs/superpowers/specs/2026-06-19-review-queue-redesign.md` (append traceability table)
 - Test: full suite + manifest validation.
 
 **Interfaces:**
@@ -1116,7 +1116,7 @@ Append to `plugins/orchestration/assets/CLAUDE.md`:
 
 - [ ] **Step 2: Register the `merge-resolved:` marker in spec §7**
 
-The plan introduces one marker beyond spec §7's list — `merge-resolved:` (the close-half used by `bot_marker_pending` to invalidate a superseded merge request on rework, AC25). Add it to the spec so §7 stays the single source of truth. In `docs/superpowers/specs/ganpan-review-queue-redesign.md` §7, change the **신규 마커** line:
+The plan introduces one marker beyond spec §7's list — `merge-resolved:` (the close-half used by `bot_marker_pending` to invalidate a superseded merge request on rework, AC25). Add it to the spec so §7 stays the single source of truth. In `docs/superpowers/specs/2026-06-19-review-queue-redesign.md` §7, change the **신규 마커** line:
 
 ```
 - **신규 마커(봇 작성):** `decision-requested:` / `decision-resolved:` / `decision-clarify:` / `followup-created:` / `merge-requested:` / `cap-exceeded:`.
@@ -1128,7 +1128,7 @@ to additionally list `merge-resolved:`:
 
 - [ ] **Step 3: Append the AC traceability table to the spec**
 
-Append to `docs/superpowers/specs/ganpan-review-queue-redesign.md`:
+Append to `docs/superpowers/specs/2026-06-19-review-queue-redesign.md`:
 
 ```markdown
 
@@ -1176,7 +1176,7 @@ Expected: all bats PASS; shellcheck clean; all `jq` validations succeed.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugins/orchestration/assets/CLAUDE.md docs/superpowers/specs/ganpan-review-queue-redesign.md
+git add plugins/orchestration/assets/CLAUDE.md docs/superpowers/specs/2026-06-19-review-queue-redesign.md
 git commit -m "docs(orch): document decision-gate lane and add AC traceability"
 ```
 

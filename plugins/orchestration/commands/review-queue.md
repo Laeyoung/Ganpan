@@ -166,7 +166,7 @@ if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resol
   gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
   gh pr comment "$PR" --body "<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>" --repo "$REPO"   # 리뷰 결과는 PR에
 fi
-# Poll merge state; do NOT approve or merge.
+# Check merge state ONCE; do NOT approve or merge, and do NOT busy-poll.
 gh pr view "$PR" --json state,mergedAt --repo "$REPO"
 ```
 When `mergedAt` is set:
@@ -175,6 +175,7 @@ gh issue edit "$N" --add-label status:qa --remove-label status:in-review --repo 
 ORCH_CONFIG="$CFG" project_sync "$N" "QA"
 git worktree remove "$WORKTREE_BASE/wt-issue-$N"
 ```
+When `mergedAt` is **null** (the merge request is posted but a human has not merged yet): take **no further action** on this issue this tick — leave it in `status:in-review`, count it as `awaiting-merge`, and move to the next issue. Do **not** loop waiting on the same PR; the next Reviewer tick re-checks. (A one-shot run-all sweep relies on this — without it the spawned Reviewer agent could busy-poll a single unmerged PR.)
 Minor non-blocking observations that do not affect accuracy are appended to the **PR review comment** (the `gh pr comment` posted in R-D), not to the lean `merge-requested:` issue marker, and not gated.
 
 ### Step F — External termination / manual label hygiene (each tick)
