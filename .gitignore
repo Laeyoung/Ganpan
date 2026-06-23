@@ -5,3 +5,15 @@ hb-*.pid
 docs/reviews/*.state.json
 # qa-review-loop state files — same machine-local bookkeeping
 docs/qa/*.state.json
+
+# scheduled-task lock — per-session runtime state (sessionId/pid), not source
+.claude/scheduled_tasks.lock
+
+# copy-in install artifacts — this repo self-installs ganpan (install.sh) to run
+# lanes on its own issues; canonical sources live under plugins/orchestration/,
+# so these root copies are runtime-only and must not be tracked.
+/.claude/commands/
+/scripts/
+/references/
+/.github/labels.yml
+/.github/ISSUE_TEMPLATE/task.yml
