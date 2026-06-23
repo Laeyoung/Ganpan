@@ -1,0 +1,20 @@
+{
+  "repo": "Laeyoung/Ganpan",
+  "bot": "Laeyoung",
+  "candidateN": 5,
+  "wipLimit": 5,
+  "reclaim": {
+    "timeoutMinutes": 120,
+    "heartbeatMinutes": 15
+  },
+  "commands": {
+    "test": null,
+    "build": null,
+    "lint": null
+  },
+  "worktreeBaseDir": "../",
+  "project": {
+    "number": null,
+    "statusField": "Status"
+  }
+}
