@@ -41,10 +41,13 @@ load_config() {
   WORKTREE_BASE=$(jq -er '.worktreeBaseDir' "$cfg")   || { log ERROR "worktreeBaseDir missing"; return 1; }
   PROJECT_NUMBER=$(jq -r '.project.number // "null"' "$cfg")
   PROJECT_STATUS_FIELD=$(jq -er '.project.statusField' "$cfg") || { log ERROR "project.statusField missing"; return 1; }
+  REVIEWER_PERM_THRESHOLD=$(jq -r '.reviewer.permissionThreshold // "write"' "$cfg")
+  REVIEWER_ALLOWLIST=$(jq -r '.reviewer.allowlist[]? // empty' "$cfg")
+  FOLLOWUP_CAP=$(jq -r '.reviewer.followupIssueCapPerPR // 3' "$cfg")
   # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
   # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
-  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID
+  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP
 }
 
 # require_bot_actor — assert the gh actor matches config.bot before any write.
@@ -90,4 +93,45 @@ project_sync() {
   item_id=$(gh project item-list "$PROJECT_NUMBER" --owner "$owner" --format json \
     | jq -er --argjson num "$issue" '.items[] | select(.content.number==$num) | .id')
   gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id"
+}
+
+# perm_rank <permission> — comparable rank; unknown/none == -1 (never trusted).
+perm_rank() {
+  case "$1" in
+    admin) echo 4 ;; maintain) echo 3 ;; write) echo 2 ;;
+    triage) echo 1 ;; read|pull) echo 0 ;; *) echo -1 ;;
+  esac
+}
+
+# is_trusted <login> — tri-state. exit 0 trusted | 1 definitively untrusted | 2 lookup
+# failed (transient API error / missing account). Allowlist OR permission threshold.
+# Queried at call time (== conversion time) so a user who lost access is no longer trusted.
+# Security callers using `if is_trusted` still fail closed (1 and 2 are both non-zero).
+# The distinct 2 lets a collector (trusted-answers.sh) tell a transient failure apart from
+# a real "untrusted" and skip the tick instead of silently dropping an answer — note an
+# ordinary non-collaborator returns 200/"none" (rank -1 → return 1 below), so a non-zero
+# `gh api` exit here is a genuine request failure, not merely "no access".
+is_trusted() {
+  local user="$1"
+  if [ -n "${REVIEWER_ALLOWLIST:-}" ] && printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qxF -- "$user"; then
+    return 0
+  fi
+  local perm have need
+  perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 2
+  have=$(perm_rank "$perm")
+  need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
+  # Fail closed: a mistyped threshold (need<0, perm_rank returns -1) or an unknown
+  # permission (have<0) must reject — never fall open to read/pull. need<0 checked first
+  # so a config typo cannot grant trust to a low-privilege collaborator.
+  [ "$need" -ge 0 ] && [ "$have" -ge 0 ] && [ "$have" -ge "$need" ]
+}
+
+# bot_marker_pending <openPrefix> <resolvePrefix> — reads a {comments:[...]} JSON on
+# stdin; prints "yes" if the LATEST bot marker matching either prefix is an open one.
+bot_marker_pending() {
+  local open="$1" resolve="$2"
+  jq -r --arg b "$BOT" --arg o "$open" --arg r "$resolve" '
+    [.comments[] | select(.author.login==$b and ((.body|startswith($o)) or (.body|startswith($r))))] as $m
+    | if ($m|length)==0 then "no"
+      else (if ($m[-1].body|startswith($o)) then "yes" else "no" end) end'
 }

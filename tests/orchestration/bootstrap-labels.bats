@@ -9,11 +9,11 @@ setup() {
   LABELS="$BATS_TEST_DIRNAME/../../plugins/orchestration/assets/labels.yml"
 }
 
-@test "creates all 7 labels via gh label create" {
+@test "creates all 8 labels via gh label create" {
   run bash "$SCRIPT" "$LABELS"
   [ "$status" -eq 0 ]
   run grep -c '^label create' "$GH_CALLS"
-  [ "$output" -eq 7 ]
+  [ "$output" -eq 8 ]
 }
 
 @test "passes name color and description for each label" {
@@ -25,7 +25,13 @@ setup() {
   bash "$SCRIPT" "$LABELS"
   # --force on every label create; without it a second bootstrap run would error on existing labels
   run grep -c 'label create .* --force' "$GH_CALLS"
-  [ "$output" -eq 7 ]
+  [ "$output" -eq 8 ]
+}
+
+@test "bootstrap-labels creates status:needs-decision" {
+  run bash "$SCRIPT" "$LABELS"
+  [ "$status" -eq 0 ]
+  grep -q 'label create status:needs-decision' "$GH_CALLS"
 }
 
 @test "is NOT actor-gated — runs under /orch-setup before the bot PAT exists (spec §4.3)" {
@@ -37,5 +43,5 @@ setup() {
   [ "$status" -eq 0 ]
   ! grep -q 'api user' "$GH_CALLS"          # never probes identity == never gated
   run grep -c '^label create' "$GH_CALLS"
-  [ "$output" -eq 7 ]
+  [ "$output" -eq 8 ]
 }
