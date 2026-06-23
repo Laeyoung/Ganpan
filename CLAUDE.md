@@ -39,3 +39,7 @@ Format: `type(scope): subject`
 
 ## Merge gate
 - Agents never approve or merge PRs. A human reviews and merges (branch protection enforces this).
+
+## Versioning (SemVer — bump `plugins/orchestration/.claude-plugin/plugin.json`)
+- **fix** → patch (`x.y.Z`); **feat** → minor (`x.Y.0`); breaking change → major (`X.0.0`).
+- The marketplace pulls `main` and the plugin cache keys on this `version` — **a merge that does not bump it never reaches installed users.** Bump it in the same PR as the change.
