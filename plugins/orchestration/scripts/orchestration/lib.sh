@@ -53,15 +53,40 @@ load_config() {
 # require_bot_actor — assert the gh actor matches config.bot before any write.
 # Escape hatch: ORCH_SKIP_ACTOR_CHECK=1 (e.g. CI where the bot PAT *is* the actor).
 # Must be set per-invocation, never exported globally.
+#
+# A *lookup* failure (gh exits non-zero, or returns an empty login) is treated as
+# transient — a one-off API blip or rate-limit shouldn't hard-stop the whole lane —
+# so the probe is retried a few times before giving up. A *resolved* identity that
+# does not match config.bot is NOT transient: it is retried zero times and fails
+# immediately, since retrying a genuine mismatch could only mask a wrong actor.
+# Override counts via ORCH_ACTOR_RETRIES / ORCH_ACTOR_RETRY_DELAY (seconds).
 require_bot_actor() {
   [ "${ORCH_SKIP_ACTOR_CHECK:-}" = "1" ] && { log WARN "ORCH_SKIP_ACTOR_CHECK=1 — actor identity gate bypassed"; return 0; }
   # jq -er in load_config rejects null but NOT an empty JSON string, so config.bot=""
   # yields BOT=""; without this guard an empty actor would compare equal and pass.
   [ -n "$BOT" ] || { log ERROR "config.bot is empty"; return 1; }
-  local actor
-  actor=$(gh api user --jq .login 2>/dev/null) \
-    || { log ERROR "cannot resolve gh identity (gh authenticated?)"; return 1; }
-  [ -n "$actor" ] || { log ERROR "gh api user returned empty login"; return 1; }
+  local retries="${ORCH_ACTOR_RETRIES:-2}" delay="${ORCH_ACTOR_RETRY_DELAY:-2}"
+  local attempt=0 actor rc
+  while :; do
+    # `if actor=$(...)` keeps the non-zero exit from tripping `set -e` (a bare
+    # `actor=$(...); rc=$?` would exit the script before rc is read) and captures
+    # the lookup's success/failure as $rc for the transient-vs-resolved decision.
+    if actor=$(gh api user --jq .login 2>/dev/null); then rc=0; else rc=$?; fi
+    if [ "$rc" -eq 0 ] && [ -n "$actor" ]; then
+      break  # lookup resolved — fall through to the (non-retried) match check
+    fi
+    if [ "$attempt" -ge "$retries" ]; then
+      if [ "$rc" -ne 0 ]; then
+        log ERROR "cannot resolve gh identity (gh authenticated?)"
+      else
+        log ERROR "gh api user returned empty login"
+      fi
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    log WARN "gh identity lookup failed (transient); retry $attempt/$retries"
+    sleep "$delay"
+  done
   if [ "$actor" != "$BOT" ]; then
     log ERROR "gh is acting as '$actor' but config.bot is '$BOT'."
     log ERROR "Export the bot PAT first:  export GH_TOKEN=github_pat_...  (HTTPS, not ssh)"
