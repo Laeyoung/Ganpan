@@ -16,10 +16,20 @@ fi
 # consuming a queued-response slot. Standalone case BEFORE the queue-emitting one;
 # 3-word expansion so "api user "* matches `gh api user --jq .login`.
 # `-` (not `:-`): GH_STUB_LOGIN set-but-empty yields an empty login, for the
-# "empty login" gate test.
+# "empty login" gate test. Must precede the read-api clause below, which would
+# otherwise consume a queue slot for `gh api user`.
 case "${1:-} ${2:-} ${3:-}" in
   "api user "*) echo "${GH_STUB_LOGIN-bot-login}"; exit "${GH_EXIT:-0}" ;;
 esac
+# Read-style `gh api` (GET): emit the next queued response. Write `api` (-X/--method
+# POST|PUT|PATCH|DELETE) is left to fall through and must NOT consume a slot.
+if [ "${1:-}" = "api" ] && ! printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](POST|PUT|PATCH|DELETE)'; then
+  idx_file="$GH_RESPONSES/.idx"
+  n=$(( $(cat "$idx_file" 2>/dev/null || echo 0) + 1 ))
+  echo "$n" > "$idx_file"
+  [ -f "$GH_RESPONSES/$n" ] && cat "$GH_RESPONSES/$n" || true
+  exit "${GH_EXIT:-0}"
+fi
 case "${1:-} ${2:-}" in
   "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list")
     idx_file="$GH_RESPONSES/.idx"

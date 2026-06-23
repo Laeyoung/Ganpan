@@ -6,5 +6,6 @@
   "reclaim": { "timeoutMinutes": 120, "heartbeatMinutes": 15 },
   "commands": { "test": null, "build": null, "lint": null },
   "worktreeBaseDir": "../",
-  "project": { "number": null, "statusField": "Status" }
+  "project": { "number": null, "statusField": "Status" },
+  "reviewer": { "permissionThreshold": "write", "allowlist": [], "followupIssueCapPerPR": 3 }
 }
