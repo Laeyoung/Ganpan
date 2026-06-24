@@ -1,6 +1,7 @@
 # Reviewer lane: post review results on the PR, keep the Issue lean
 
 > Status: proposal (awaiting review). Target: `/ganpan:review-queue` (Reviewer lane).
+> Update (2026-06-24): shipped design refined — Step A forms judgment only; the routing action (R-A/R-D) is the sole PR-narrative poster, and the Coder lane reads the reviewer's reasons off the PR. See `2026-06-24-review-queue-pr-results-fixes.md`.
 
 ## Context / problem
 
