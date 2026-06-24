@@ -75,6 +75,17 @@ GATE_OPEN=$(printf '%s' "$VIEW" | bot_marker_pending "decision-requested:" "deci
 ```
 - **New-commit invalidation (AC9, AC20):** if `GATE_OPEN == yes`, read the recorded SHA from the latest `decision-requested: head=<sha7> ::` marker body. If it differs from `$HEAD`, post `decision-resolved: superseded-new-commits`, drop `status:needs-decision`, and **re-run from Step A** (discard this tick's answers — they targeted stale review). This takes precedence over acting on any answer.
 
+### Review comment format (R-A reasons & R-D summary)
+
+Every narrative you post to the PR (`gh pr comment`) must be **structured GitHub-flavoured markdown**, never one dense run-on paragraph. Write it so a human skims it in seconds:
+- **Lead line** that states this is a bot review, not an approval — e.g. `리뷰 (봇, 승인 아님 — 머지는 사람이 진행):`.
+- **Bold section headings** grouping the points (e.g. `**통과 기준 충족** ✅`, `**검증함**`, `**변경 요청**`, `**참고**`), each followed by a **bullet list** — one point per `-` bullet, not comma-joined prose.
+- Use `✅` / `⚠️` / `❌` to mark verdicts, and backticks for files/labels/identifiers.
+- **R-D (merge summary):** close with an explicit human-merge line — e.g. `머지 가능 상태로 판단합니다. **사람 리뷰어**가 승인 후 머지해 주세요 (브랜치 보호상 봇은 승인/머지 불가).`
+- **R-A (rework):** lead the body with a `**변경 요청**` heading and a bullet per concrete change request, so the Coder can act on each on resume.
+
+The `<…>` bodies in the blocks below are placeholders — fill them following this format. Keep the **issue markers** (`rework-requested:` / `merge-requested:`) lean and unformatted; only the PR comment carries the formatted narrative.
+
 ### Routing actions
 
 **R-A — rework**
@@ -84,7 +95,7 @@ GATE_OPEN=$(printf '%s' "$VIEW" | bot_marker_pending "decision-requested:" "deci
 # receives the reasons even if the run dies before the marker (a rare duplicate PR
 # comment on re-entry is preferable to losing the reasons entirely — the reasons are
 # the critical payload the Coder reads on resume, work-issue step 5).
-gh pr comment "$PR" --body "<rework 사유 상세>" --repo "$REPO"   # 리뷰 결과(사유)는 PR에
+gh pr comment "$PR" --body "<rework 사유 상세 — 위 'Review comment format' 따라 구조화>" --repo "$REPO"   # 리뷰 결과(사유)는 PR에
 # (optional) per-line findings, comment-only — never --approve:
 # gh pr review "$PR" --comment --body "<inline 근거>" --repo "$REPO"
 gh issue comment "$N" --body "rework-requested: 변경 요청 — 상세는 PR #$PR" --repo "$REPO"
@@ -164,7 +175,7 @@ if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resol
   # A crash in the gap drops only the (non-critical) summary and never duplicates
   # it — the opposite trade-off from R-A, whose reasons are critical payload.
   gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
-  gh pr comment "$PR" --body "<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>" --repo "$REPO"   # 리뷰 결과는 PR에
+  gh pr comment "$PR" --body "<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등 — 위 'Review comment format' 따라 구조화>" --repo "$REPO"   # 리뷰 결과는 PR에
 fi
 # Check merge state ONCE; do NOT approve or merge, and do NOT busy-poll.
 gh pr view "$PR" --json state,mergedAt --repo "$REPO"
