@@ -50,6 +50,20 @@ setup() {
   grep -q 'issue comment 42 --body claim: ' "$GH_CALLS"
 }
 
+@test "stdout carries ONLY the issue number even when gh writes leak URLs on success" {
+  # Regression for the ISSUE=$(claim.sh) corruption: real `gh issue edit/comment` print the
+  # resource URL to stdout on success. With GH_EMIT_WRITE_URL the stub mimics that, so this
+  # asserts claim.sh keeps every mutating write off stdout and emits only `echo "$issue"`.
+  export GH_EMIT_WRITE_URL=1
+  queue_response '[{"number":42,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "42" ]                  # exactly the number — no https://… lines
+  [[ "$output" != *"STUB-URL"* ]]       # the leaked write URL never reached stdout
+}
+
 @test "two distinct claim tokens → lexicographic-min wins; if ours is larger we lose (exit 2) and delete our comment" {
   queue_response '[{"number":7,"createdAt":"2026-01-01T00:00:00Z"}]'    # list
   # re-read shows TWO claim tokens; the smaller one belongs to another process
