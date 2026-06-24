@@ -235,6 +235,7 @@ JSON
 
 @test "require_bot_actor fails when gh returns an empty login" {
   export GH_STUB_LOGIN=
+  export ORCH_ACTOR_RETRY_DELAY=0  # empty login is retried as transient; don't sleep
   run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
   [ "$status" -ne 0 ]
   [[ "$output" == *"empty login"* ]]
@@ -243,9 +244,40 @@ JSON
 @test "require_bot_actor fails when gh api user errors (unresolvable identity)" {
   export GH_STUB_LOGIN=botx
   export GH_EXIT=1
+  export ORCH_ACTOR_RETRY_DELAY=0  # lookup error is retried as transient; don't sleep
   run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
   [ "$status" -ne 0 ]
   [[ "$output" == *"cannot resolve gh identity"* ]]
+}
+
+@test "require_bot_actor retries a transient lookup failure, then succeeds" {
+  export GH_STUB_LOGIN=botx
+  export GH_USER_FAIL_TIMES=2
+  export ORCH_ACTOR_RETRIES=2 ORCH_ACTOR_RETRY_DELAY=0
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"retry 1/2"* ]]
+  [[ "$output" == *"retry 2/2"* ]]
+}
+
+@test "require_bot_actor gives up after exhausting retries on a persistent lookup failure" {
+  export GH_STUB_LOGIN=botx
+  export GH_USER_FAIL_TIMES=99
+  export ORCH_ACTOR_RETRIES=2 ORCH_ACTOR_RETRY_DELAY=0
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"cannot resolve gh identity"* ]]
+}
+
+@test "require_bot_actor does NOT retry a resolved-but-mismatched actor" {
+  export GH_STUB_LOGIN=intruder
+  export ORCH_ACTOR_RETRIES=5 ORCH_ACTOR_RETRY_DELAY=0
+  run bash -c 'source "$0"; load_config; require_bot_actor 2>&1' "$LIB"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"acting as 'intruder'"* ]]
+  [[ "$output" != *"retry"* ]]
+  # exactly one probe — a real mismatch must fail immediately, not be retried away
+  [ "$(grep -c 'api user' "$GH_CALLS")" -eq 1 ]
 }
 
 @test "ORCH_SKIP_ACTOR_CHECK=1 short-circuits without calling gh" {

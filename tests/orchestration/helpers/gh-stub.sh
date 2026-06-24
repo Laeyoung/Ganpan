@@ -19,7 +19,19 @@ fi
 # "empty login" gate test. Must precede the read-api clause below, which would
 # otherwise consume a queue slot for `gh api user`.
 case "${1:-} ${2:-} ${3:-}" in
-  "api user "*) echo "${GH_STUB_LOGIN-bot-login}"; exit "${GH_EXIT:-0}" ;;
+  "api user "*)
+    # GH_USER_FAIL_TIMES: fail the first N `gh api user` probes with exit 1 and no
+    # output, then succeed — exercises the transient-failure retry path in
+    # require_bot_actor. The counter persists across calls in $GH_CALLS.userfail.
+    if [ -n "${GH_USER_FAIL_TIMES:-}" ]; then
+      state="$GH_CALLS.userfail"
+      done_n=$(cat "$state" 2>/dev/null || echo 0)
+      if [ "$done_n" -lt "$GH_USER_FAIL_TIMES" ]; then
+        echo $((done_n + 1)) > "$state"
+        exit 1
+      fi
+    fi
+    echo "${GH_STUB_LOGIN-bot-login}"; exit "${GH_EXIT:-0}" ;;
 esac
 # Read-style `gh api` (GET): emit the next queued response. Write `api` (-X/--method
 # POST|PUT|PATCH|DELETE) is left to fall through and must NOT consume a slot.
