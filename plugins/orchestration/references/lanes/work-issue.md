@@ -12,7 +12,7 @@ Run from the main repository root.
    ```bash
    ISSUE="$(scripts/orchestration/claim.sh)"
    ```
-   Stop on queue-empty or lost-race exits.
+   Stop on any non-success exit: queue-empty (exit 1), clean lost-race or rolled-back-to-agent-ready (exit 2), or unconfirmed-claim (exit 3 — issue left `status:in-progress` for `reclaim.sh` to recover; do not retry-claim).
 4. Create or reuse `wt-issue-<ISSUE>` under `WORKTREE_BASE` and branch `issue-<ISSUE>`.
 5. Start heartbeat before long-running work. When cwd may be the worktree, call heartbeat with the main checkout config:
    ```bash
