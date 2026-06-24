@@ -18,7 +18,7 @@ Run from the main repository root.
    ```bash
    ORCH_CONFIG="$CFG" scripts/orchestration/heartbeat.sh "$ISSUE"
    ```
-6. Implement the issue — on a rework resume, first read the reviewer's most recent rework narrative from the bot-authored PR comments (an older merge-request summary or a merge-request retraction note is stale, not a change request) — then run detected test/build commands and surface results.
+6. Implement the issue — on a rework resume, first read the reviewer's most recent rework narrative from the bot-authored PR comments and reviews (an older merge-request summary or a merge-request retraction note is stale, not a change request) — then run detected test/build commands and surface results.
 7. Commit with Conventional Commits and include `Closes #<ISSUE>`.
 8. Create or update a PR from `issue-<ISSUE>` to `main`.
 9. Sync project status to `In Review` when configured.

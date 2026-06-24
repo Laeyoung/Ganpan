@@ -97,12 +97,20 @@ if [ "${GATE_OPEN:-no}" = "yes" ]; then
 fi
 gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO" 2>/dev/null || true
 # Invalidate a stale merge request so a fresh one is posted after rework (AC25).
-# Retract it on BOTH the issue marker AND the PR: the merge-request narrative now
+# Retract it on BOTH the PR and the issue marker: the merge-request narrative now
 # lives on the PR, so without the PR-side retraction a human reading only the PR
 # sees an uncontradicted "please merge" comment after the rework.
+# Post the PR retraction FIRST, then the issue marker (the guard key) — same
+# crash-safety rationale as the rework reasons above: the human-visible PR
+# contradiction is the critical payload, so guarantee it lands. If the run dies
+# after the PR comment but before the issue marker, the next tick re-enters with
+# merge-resolved: still absent → guard is "yes" → it reposts the PR retraction (a
+# rare harmless duplicate) and the marker. The reverse order would, on the same
+# crash, leave merge-resolved: on the issue while the guard now reads "no",
+# permanently skipping the PR retraction and stranding the stale "please merge".
 if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" = "yes" ]; then
-  gh issue comment "$N" --body "merge-resolved: superseded-by-rework" --repo "$REPO"
-  gh pr comment "$PR" --body "<이전 머지 요청 철회: rework로 대체됨>" --repo "$REPO"   # PR에도 철회 표시
+  gh pr comment "$PR" --body "<이전 머지 요청 철회: rework로 대체됨>" --repo "$REPO"   # PR 먼저 (critical payload)
+  gh issue comment "$N" --body "merge-resolved: superseded-by-rework" --repo "$REPO"   # guard key 나중
 fi
 ORCH_CONFIG="$CFG" project_sync "$N" "In Progress"
 ```
