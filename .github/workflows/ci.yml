@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel an in-flight run when a branch is pushed again (keeps the queue lean).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Run every OS to completion even if one fails — branch protection can require
+      # just the Linux job while the macOS job (BSD `date` fallback coverage) stays advisory.
+      fail-fast: false
+      matrix:
+        # macOS exercises the BSD `date` path in lib.sh's iso_to_epoch (the DoD's optional check).
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tools the suite needs: bats (test runner), shellcheck (lint), jq + yq (manifest /
+      # codex-skill YAML validation). gh is stubbed by the tests, so it is not installed.
+      - name: Install tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck jq
+          npm install -g bats
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Install tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bats-core shellcheck jq yq
+
+      - name: Tool versions
+        run: |
+          bats --version
+          shellcheck --version | sed -n '1,2p'
+          jq --version
+          yq --version
+
+      - name: shellcheck
+        run: shellcheck plugins/orchestration/scripts/orchestration/*.sh
+
+      - name: validate manifests
+        run: jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json
+
+      - name: bats
+        run: bats tests/*.bats tests/orchestration/*.bats
