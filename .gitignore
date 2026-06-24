@@ -12,8 +12,12 @@ docs/qa/*.state.json
 # copy-in install artifacts — this repo self-installs ganpan (install.sh) to run
 # lanes on its own issues; canonical sources live under plugins/orchestration/,
 # so these root copies are runtime-only and must not be tracked.
+# EXCEPTION: .github/ISSUE_TEMPLATE/task.yml IS tracked — GitHub renders issue
+# templates only from files committed to the default branch, so this one copy
+# must be committed for the New Issue chooser (and its status:triage label) to
+# work. labels.yml stays ignored (labels are bootstrapped via `gh label`, not
+# read from the repo by GitHub).
 /.claude/commands/
 /scripts/
 /references/
 /.github/labels.yml
-/.github/ISSUE_TEMPLATE/task.yml
