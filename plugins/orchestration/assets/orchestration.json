@@ -7,5 +7,5 @@
   "commands": { "test": null, "build": null, "lint": null },
   "worktreeBaseDir": "../",
   "project": { "number": null, "statusField": "Status" },
-  "reviewer": { "permissionThreshold": "write", "allowlist": [], "followupIssueCapPerPR": 3 }
+  "reviewer": { "permissionThreshold": "write", "allowlist": [], "followupIssueCapPerPR": 3, "autoMerge": false }
 }

@@ -78,20 +78,29 @@ esac
 ```
 Mode (i) only: close the gate exactly once before falling through to R-D — post `decision-resolved: out-of-scope`, remove `status:needs-decision`, and set `GATE_OPEN=no` so R-D's guard does not post a second `decision-resolved:`. Mode (ii) skips this; its rule-4/rule-7 path owns the gate resolution. cap-exceeded items do not block the merge request.
 
-**R-D — request human merge.**
+**R-D — request human merge (or auto-merge when enabled).**
 ```bash
 if [ "$GATE_OPEN" = "yes" ]; then
   gh issue comment "$N" --body "decision-resolved: proceed" --repo "$REPO"
   gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO"
 fi
-if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
-  # Lean issue marker FIRST (it is the guard key), then the best-effort PR summary.
+# Auto-merge (opt-in, reviewer.autoMerge — default off). Reached only on the proceed verdict,
+# so the reviewer-verdict gate is already satisfied. auto-merge.sh self-gates on the flag,
+# base-branch protection, and PR readiness (OPEN + MERGEABLE + CLEAN), and merges ONLY when the
+# human has removed branch protection — the agent never bypasses an active gate.
+AM=$(ORCH_CONFIG="$CFG" scripts/orchestration/auto-merge.sh "$PR")
+if [ "$AM" = "merged" ]; then
+  : # auto-merged — skip the human-merge request; the mergedAt-set transition below fires.
+elif [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
   gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
-  gh pr comment "$PR" --body "<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>" --repo "$REPO"
+  SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>"
+  # If autoMerge is on but main is still protected, tell the human to disable protection (once).
+  [ "$AM" = "protected" ] && SUMMARY="$SUMMARY"$'\n\n'"> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 \`main\` 브랜치 보호가 활성화되어 자동 머지하지 않았습니다. 자동 머지를 쓰려면 보호를 해제하세요."
+  gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"
 fi
-gh pr view "$PR" --json state,mergedAt --repo "$REPO"   # poll only; never approve or merge
+gh pr view "$PR" --json state,mergedAt --repo "$REPO"   # poll only; never approve or merge manually
 ```
-When `mergedAt` is set: move `status:in-review` → `status:qa`, sync project status to `QA`, and remove the worktree (`git worktree remove "$WORKTREE_BASE/wt-issue-$N"`). Minor non-blocking observations go in the PR review comment, not the lean `merge-requested:` marker, and are not gated.
+When `mergedAt` is set (human-merged or auto-merged): move `status:in-review` → `status:qa`, sync project status to `QA`, and remove the worktree (`git worktree remove "$WORKTREE_BASE/wt-issue-$N"`). Minor non-blocking observations go in the PR review comment, not the lean `merge-requested:` marker, and are not gated.
 
 ## F. External termination / manual label hygiene (each tick)
 - **PR closed unmerged or issue closed:** remove `status:in-review` / `status:needs-decision`, post an audit marker, drop from the queue.
