@@ -163,21 +163,39 @@ GATE_OPEN=no   # gate now closed — stops R-D's guard from posting a 2nd decisi
 ```
 Then continue to R-D (cap-exceeded items do not block the merge request). Setting `GATE_OPEN=no` is required: R-D's gate-resolution guard reuses the `$GATE_OPEN` captured in Step E, so without this a second, contradictory `decision-resolved: proceed` would be posted (§5.5 — exactly one `decision-resolved:` closes a gate).
 
-**R-D — request human merge**
+**R-D — request human merge (or auto-merge when enabled)**
 ```bash
 if [ "$GATE_OPEN" = "yes" ]; then
   gh issue comment "$N" --body "decision-resolved: proceed" --repo "$REPO"
   gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO"
 fi
-if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
+# Auto-merge (opt-in, reviewer.autoMerge — default off). This block is reached only on
+# the R-D "proceed" verdict, so the reviewer-verdict gate (not rework/needs-decision/
+# followup) is already satisfied. auto-merge.sh self-gates on the flag, base-branch
+# protection, and PR readiness (OPEN + MERGEABLE + CLEAN), and merges ONLY when the human
+# has removed branch protection — the agent never bypasses an active gate.
+AM=$(ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/auto-merge.sh "$PR")
+if [ "$AM" = "merged" ]; then
+  : # PR auto-merged — skip the human-merge request; the mergedAt-set transition below runs.
+elif [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
+  # Not auto-merged (disabled / protected / not-ready / error) → request a human merge.
   # Post the lean issue marker FIRST (it is the guard key), then the PR summary.
   # The marker is critical lane state; the PR summary is best-effort narrative.
   # A crash in the gap drops only the (non-critical) summary and never duplicates
   # it — the opposite trade-off from R-A, whose reasons are critical payload.
   gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
-  gh pr comment "$PR" --body "<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등 — 위 'Review comment format' 따라 구조화>" --repo "$REPO"   # 리뷰 결과는 PR에
+  SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등 — 위 'Review comment format' 따라 구조화>"
+  if [ "$AM" = "protected" ]; then
+    # autoMerge is on but main is still protected → tell the human how to enable it (post once,
+    # inside the guarded block so it is not repeated every tick).
+    SUMMARY="$SUMMARY
+
+> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 \`main\` 브랜치 보호가 활성화되어 있어 **자동 머지하지 않았습니다**. 자동 머지를 쓰려면 \`main\`의 브랜치 보호를 해제하세요 (보호가 유지되는 동안은 사람이 직접 머지)."
+  fi
+  gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"   # 리뷰 결과는 PR에
 fi
-# Check merge state ONCE; do NOT approve or merge, and do NOT busy-poll.
+# Check merge state ONCE; do NOT approve or merge manually, and do NOT busy-poll.
+# (When auto-merge ran, mergedAt is now set and the transition below fires this tick.)
 gh pr view "$PR" --json state,mergedAt --repo "$REPO"
 ```
 When `mergedAt` is set:
