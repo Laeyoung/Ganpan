@@ -5,7 +5,7 @@
 
 ## Install (plugin — recommended)
 1. `/plugin marketplace add Laeyoung/Ganpan`
-2. Install the `ganpan` plugin (from the `laeyoung` marketplace).
+2. `/plugin install ganpan@laeyoung`
 3. In the target repo, run `/orch-setup owner/repo` — it checks prerequisites,
    writes `.claude/orchestration.json`, installs `.github/labels.yml` + the issue
    template, merges the CLAUDE.md conventions, and bootstraps labels.

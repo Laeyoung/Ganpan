@@ -58,7 +58,7 @@ gh auth status            # 인증 확인 (HTTPS 권장)
 
 ```text
 1. /plugin marketplace add Laeyoung/Ganpan
-2. laeyoung 마켓플레이스에서 ganpan 플러그인 설치
+2. /plugin install ganpan@laeyoung
 3. 대상 레포 루트에서:  /ganpan:orch-setup owner/repo
 4. /ganpan:orch-setup 이 출력하는 사람용 체크리스트 완료
 ```
