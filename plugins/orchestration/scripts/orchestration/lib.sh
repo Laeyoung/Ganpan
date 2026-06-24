@@ -130,20 +130,31 @@ perm_rank() {
 }
 
 # is_trusted <login> — tri-state. exit 0 trusted | 1 definitively untrusted | 2 lookup
-# failed (transient API error / missing account). Allowlist OR permission threshold.
+# failed (transient API error). Allowlist OR permission threshold.
 # Queried at call time (== conversion time) so a user who lost access is no longer trusted.
 # Security callers using `if is_trusted` still fail closed (1 and 2 are both non-zero).
 # The distinct 2 lets a collector (trusted-answers.sh) tell a transient failure apart from
 # a real "untrusted" and skip the tick instead of silently dropping an answer — note an
-# ordinary non-collaborator returns 200/"none" (rank -1 → return 1 below), so a non-zero
-# `gh api` exit here is a genuine request failure, not merely "no access".
+# ordinary non-collaborator returns 200/"none" (rank -1 → return 1 below), while a 404 (the
+# account was deleted or renamed, so it can never be a collaborator) is also a definitive
+# "untrusted" → return 1, NOT 2: otherwise one comment from a vanished account would 404 on
+# every tick and the rc-2 abort would stall trusted-answers.sh's decision gate indefinitely.
 is_trusted() {
   local user="$1"
   if [ -n "${REVIEWER_ALLOWLIST:-}" ] && printf '%s\n' "$REVIEWER_ALLOWLIST" | grep -qxF -- "$user"; then
     return 0
   fi
-  local perm have need
-  perm=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>/dev/null) || return 2
+  local perm have need out rc
+  # Capture stderr (2>&1) so a 404 can be told apart from a transient failure: gh prints
+  # "HTTP 404" on a missing account → definitively untrusted (1); any other failure → 2.
+  out=$(gh api "repos/$REPO/collaborators/$user/permission" --jq '.permission' 2>&1) && rc=0 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    case "$out" in
+      *"HTTP 404"*) return 1 ;;
+      *) return 2 ;;
+    esac
+  fi
+  perm="$out"
   have=$(perm_rank "$perm")
   need=$(perm_rank "$REVIEWER_PERM_THRESHOLD")
   # Fail closed: a mistyped threshold (need<0, perm_rank returns -1) or an unknown
