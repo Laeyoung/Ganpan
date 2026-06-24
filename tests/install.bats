@@ -29,6 +29,12 @@ setup() {
   # they must carry no path-form token either.
   run grep -rl 'CLAUDE_PLUGIN_ROOT}/' "$TARGET/.claude/commands" "$TARGET/scripts/orchestration" "$TARGET/references"
   [ "$status" -ne 0 ]   # grep -l exits non-zero when there are no matches
+  # The path-form check above narrows to `CLAUDE_PLUGIN_ROOT}/`, which lets a
+  # *bare* (slashless) unsubstituted token drift through in any lane file. run-all.md
+  # is the ONLY file that legitimately keeps a bare ${CLAUDE_PLUGIN_ROOT} (install-mode
+  # detection + agent-preamble prose); every other copied command must carry none.
+  run grep -rl --exclude=run-all.md 'CLAUDE_PLUGIN_ROOT' "$TARGET/.claude/commands"
+  [ "$status" -ne 0 ]
   run grep -q './references/lanes/work-issue.md' "$TARGET/.claude/commands/work-issue.md"
   [ "$status" -eq 0 ]
 }
