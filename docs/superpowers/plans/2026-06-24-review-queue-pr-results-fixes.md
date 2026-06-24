@@ -75,6 +75,8 @@ to:
 
 (Preserve the rest of Step 5 verbatim: the `detect-test-cmd.sh test`/`build` sentence.)
 
+> **Shipped refinement (post-review):** the `gh pr view` call is wrapped in `if [ -n "${PR:-}" ]; then … fi` (resume-only — a fresh claim has no PR), the step-1 capture uses `--jq '.[0].number // empty'` (so `$PR` stays unset, not the string `"null"`, when no open PR exists), and step 5 instructs the Coder to act on the reviewer's **most recent** rework narrative, treating an older `merge-requested:` summary or a `머지 요청 철회` retraction note as stale context rather than a change request. The shipped `work-issue.md` is authoritative over this block.
+
 - [ ] **Step 3: Mirror the prose change into `references/lanes/work-issue.md`.**
 
 Edit step 1 (resume) to note the reasons live on the PR, and step 6 (implement) to read them. Change step 1's last sentence from:
