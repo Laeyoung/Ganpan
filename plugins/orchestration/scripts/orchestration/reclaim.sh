@@ -19,11 +19,10 @@ while read -r issue; do
 
   # State markers are trusted only from the bot — any user can post "rework-requested:" to
   # freeze an issue, "rework-resolved:" to unfreeze, or "claim:" to skew the timeout clock.
-  # unresolved rework? (latest bot rework-requested with no later rework-resolved) → skip
-  unresolved=$(echo "$view" | jq -r --arg b "$BOT" '
-    [.comments[] | select(.author.login==$b and (.body|startswith("rework-requested:") or startswith("rework-resolved:")))] as $m
-    | ($m | length) as $len
-    | if $len==0 then "no" else (if ($m[($len-1)].body|startswith("rework-requested:")) then "yes" else "no" end) end')
+  # unresolved rework? (latest bot rework-requested with no later rework-resolved) → skip.
+  # Use the shared bot_marker_pending helper so this stays in lockstep with the Coder lane's
+  # resume check and the Reviewer gate logic — a divergent inline copy would risk drift.
+  unresolved=$(echo "$view" | bot_marker_pending "rework-requested:" "rework-resolved:")
   if [ "$unresolved" = "yes" ]; then log INFO "#$issue unresolved rework, skip"; continue; fi
 
   # Pick the NEWEST bot claim token (lexicographic max == latest heartbeat, since the
