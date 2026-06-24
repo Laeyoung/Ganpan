@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # claim.sh — atomically claim one status:agent-ready issue.
-# exit 0 (prints issue#) | 1 no candidates | 2 lost race.
+# exit 0 (prints issue#)
+#      1 no candidates / pre-mutation list failure (nothing mutated; clean)
+#      2 clean lost race OR clean rollback to status:agent-ready (issue is back in the queue or
+#        legitimately owned by another claimant — a caller may safely retry on the next tick)
+#      3 UNCONFIRMED claim: the claim comment write succeeded but never became visible, so the
+#        issue is left status:in-progress with a server-side token for reclaim.sh to recover.
+#        Distinct from exit 2 so callers do NOT treat the issue as available or retry-claim it.
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -47,8 +53,12 @@ for _ in $(seq 1 "$RETRIES"); do
     seen=1; break
   fi
 done
-# our claim comment never became visible → unconfirmed, treat as lost (do NOT echo success)
-[ "$seen" -eq 1 ] || { log ERROR "claim comment not visible after $RETRIES retries on #$issue"; exit 2; }
+# our claim comment never became visible → UNCONFIRMED. The line-33 write returned success, so
+# the token exists server-side; we just can't confirm it within the retry budget. Leave the
+# issue status:in-progress (do NOT roll back: rolling back to agent-ready while the token exists
+# server-side would let a later claimer race a now-visible ghost token) and exit 3 so the caller
+# can distinguish this from a clean lost race. reclaim.sh recovers the issue after the timeout.
+[ "$seen" -eq 1 ] || { log ERROR "claim comment not visible after $RETRIES retries on #$issue (unconfirmed; leaving for reclaim)"; exit 3; }
 
 # ensure in-progress is present (re-add if a transient race removed it)
 if ! echo "$view" | jq -e '.labels[] | select(.name=="status:in-progress")' >/dev/null; then
@@ -60,8 +70,19 @@ fi
 # authoritative race discriminator is the claim-token count (below; see "Single-bot claim
 # discriminator" in the plan header), and a human may legitimately co-assign an issue, so
 # an exactly-1 check would cause false losses.
-echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null \
-  || { log ERROR "bot not an assignee on #$issue"; exit 2; }
+# The initial add-assignee (above) is best-effort and may have transiently failed, leaving the
+# bot off the assignee list. Rather than strand the (otherwise confirmed) claim in-progress, try
+# one re-add; if that also fails, roll the issue back cleanly to status:agent-ready — delete our
+# (visible) claim comment and reset the label — so the next claimer finds it clean (exit 2).
+if ! echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null; then
+  if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO"; then
+    log ERROR "bot not an assignee on #$issue and re-add failed, rolling back to agent-ready"
+    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
+    [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
+    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" || true
+    exit 2
+  fi
+fi
 
 # 4. tie-break on distinct claim tokens (single bot ⇒ assignee count can't discriminate).
 # Only bot-authored claim comments count — any GitHub user can post "claim: …", so an

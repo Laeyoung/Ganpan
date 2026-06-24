@@ -84,14 +84,20 @@ setup() {
   [ "$output" = "9" ]
 }
 
-@test "claim comment never visible after all retries → exit 2, no success echo" {
+@test "claim comment never visible after all retries → exit 3 (unconfirmed), no success echo, no label rollback" {
+  # The comment write itself returned success (we passed the line-33 write without GH_FAIL_MATCH),
+  # so the token exists server-side and reclaim.sh will recover the in-progress issue after timeout.
+  # This is distinct from a clean lost race (exit 2): the issue is left status:in-progress, NOT
+  # rolled back to agent-ready, so the caller must not treat it as available.
   queue_response '[{"number":13,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
   export CLAIM_RETRIES=2 CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[]}'  # re-read 1: empty
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[]}'  # re-read 2: still empty
   run bash "$SCRIPT"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 3 ]
   [ "$output" != "13" ]
+  # left in-progress for reclaim — NOT rolled back to agent-ready
+  ! grep -q 'issue edit 13 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"
 }
 
 @test "duplicate identical claim comments (retry) dedup to one → claim proceeds" {
@@ -105,13 +111,33 @@ setup() {
   [ "$output" = "16" ]
 }
 
-@test "bot not among assignees → exit 2" {
+@test "bot not among assignees but re-add succeeds → claim proceeds (exit 0)" {
+  # The initial add-assignee (line 32) is best-effort and may transiently fail, leaving the
+  # re-read without the bot assignee. Rather than strand the (otherwise confirmed) claim, we
+  # re-add the assignee once; success ⇒ proceed.
   queue_response '[{"number":14,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
-  # claim comment visible (so the visibility loop passes) but assignees does NOT include botx
+  # claim comment visible (visibility loop passes) but assignees does NOT include botx
+  queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "14" ]
+  # re-add attempted (a second --add-assignee beyond the initial line-32 one)
+  [ "$(grep -c 'issue edit 14 --add-assignee botx' "$GH_CALLS")" -ge 2 ]
+}
+
+@test "bot not among assignees and re-add fails → clean rollback to agent-ready (exit 2)" {
+  # If the assignee can never be added, the claim cannot be confirmed by the assignee gate.
+  # Rather than strand the issue in-progress, roll it back cleanly: delete our (visible) claim
+  # comment and reset the label to agent-ready, so the next claimer finds it clean.
+  queue_response '[{"number":14,"createdAt":"2026-01-01T00:00:00Z"}]'   # list
+  export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
+  export GH_FAIL_MATCH='add-assignee'   # both the initial add (line 32) and the re-add fail
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
+  grep -q 'api --method DELETE /repos/o/r/issues/comments/1' "$GH_CALLS"                       # deleted OUR claim comment
+  grep -q 'issue edit 14 --add-label status:agent-ready --remove-label status:in-progress' "$GH_CALLS"  # rolled back label
 }
 
 @test "in-progress label missing on re-read → re-added, then claim succeeds" {
