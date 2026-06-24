@@ -44,6 +44,11 @@ Format: `type(scope): subject`
 - **fix** → patch (`x.y.Z`); **feat** → minor (`x.Y.0`); breaking change → major (`X.0.0`).
 - The marketplace pulls `main` and the plugin cache keys on this `version` — **a merge that does not bump it never reaches installed users.** Bump it in the same PR as the change.
 
+## Development workflow & history
+- **Before starting** a feature or bugfix, check for prior history — search `docs/superpowers/` (specs & plans) and `docs/log/` (change records). Build on past decisions instead of relitigating them.
+- **New features / non-trivial changes:** use the Superpowers plugin and proceed **Spec → Plan → implementation** — write the spec under `docs/superpowers/specs/`, the plan under `docs/superpowers/plans/`, then implement against the plan.
+- **Record every shipped change** in `docs/log/` — one Markdown file per change (`docs/log/YYYY-MM-DD-<slug>.md`). Capture not just *what* changed but the **key decisions made** and the **alternatives considered but not chosen** (and why). See `docs/log/README.md` for the template.
+
 <!-- orchestration-conventions -->
 # Repo conventions
 
