@@ -32,13 +32,17 @@ issue=$(echo "$top" | jq -r ".[$pick_idx]")
 # to status:agent-ready, otherwise the issue is stuck in-progress with no token (reclaim
 # skips token-less in-progress issues, so it would never recover). Assignee is cosmetic
 # (the later check is presence-only), so a failure there does not block the claim.
+# `gh issue edit`/`gh issue comment` print the resource URL to stdout on success, so every
+# mutating call below is redirected to /dev/null — this script's stdout is its return value
+# (the issue number at the end, captured via ISSUE=$(claim.sh)); a leaked URL would corrupt it.
+# Errors still surface on stderr, and state is re-read via `gh issue view` regardless.
 token="${CLAIM_TOKEN_OVERRIDE:-$(claim_token)}"
-gh issue edit "$issue" --add-label status:in-progress --remove-label status:agent-ready --repo "$REPO" \
+gh issue edit "$issue" --add-label status:in-progress --remove-label status:agent-ready --repo "$REPO" >/dev/null \
   || { log ERROR "mark in-progress failed on #$issue"; exit 2; }
-gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" || log WARN "add-assignee failed on #$issue (continuing)"
-gh issue comment "$issue" --body "claim: $token" --repo "$REPO" || {
+gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" >/dev/null || log WARN "add-assignee failed on #$issue (continuing)"
+gh issue comment "$issue" --body "claim: $token" --repo "$REPO" >/dev/null || {
   log ERROR "claim comment failed on #$issue, rolling back label"
-  gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" || true
+  gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null || true
   exit 2
 }
 
@@ -62,7 +66,7 @@ done
 
 # ensure in-progress is present (re-add if a transient race removed it)
 if ! echo "$view" | jq -e '.labels[] | select(.name=="status:in-progress")' >/dev/null; then
-  gh issue edit "$issue" --add-label status:in-progress --repo "$REPO"
+  gh issue edit "$issue" --add-label status:in-progress --repo "$REPO" >/dev/null
 fi
 
 # spec §5.2 step 3 (adapted): verify the bot is among the assignees. We deliberately do
@@ -75,11 +79,11 @@ fi
 # one re-add; if that also fails, roll the issue back cleanly to status:agent-ready — delete our
 # (visible) claim comment and reset the label — so the next claimer finds it clean (exit 2).
 if ! echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null; then
-  if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO"; then
+  if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" >/dev/null; then
     log ERROR "bot not an assignee on #$issue and re-add failed, rolling back to agent-ready"
     cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
-    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" || true
+    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null || true
     exit 2
   fi
 fi
@@ -94,7 +98,7 @@ if [ "$ntok" -ge 2 ]; then
     # we lost: delete our own claim comment, release assignee, return 2
     cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
-    gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" || true
+    gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" >/dev/null || true
     log INFO "lost claim race on #$issue (winner=$winner)"
     exit 2
   fi
