@@ -24,6 +24,9 @@ n=$(echo "$candidates" | jq 'length')
 [ "$n" -eq 0 ] && { log INFO "no agent-ready candidates"; exit 1; }
 top=$(echo "$candidates" | jq --argjson k "$CANDIDATE_N" 'sort_by(.createdAt)[:$k] | map(.number)')
 topn=$(echo "$top" | jq 'length')
+# Guard the modulo below: a misconfigured candidateN<=0 yields an empty slice (topn=0),
+# and `RANDOM % 0` aborts under set -e — treat it as "no candidates" rather than crash.
+[ "$topn" -eq 0 ] && { log INFO "no candidates after top-N slice (check config.candidateN)"; exit 1; }
 pick_idx=$(( RANDOM % topn ))
 issue=$(echo "$top" | jq -r ".[$pick_idx]")
 
@@ -69,26 +72,12 @@ if ! echo "$view" | jq -e '.labels[] | select(.name=="status:in-progress")' >/de
   gh issue edit "$issue" --add-label status:in-progress --repo "$REPO" >/dev/null
 fi
 
-# spec §5.2 step 3 (adapted): verify the bot is among the assignees. We deliberately do
-# NOT enforce the spec's literal "exactly 1 assignee" — under the single-bot model the
-# authoritative race discriminator is the claim-token count (below; see "Single-bot claim
-# discriminator" in the plan header), and a human may legitimately co-assign an issue, so
-# an exactly-1 check would cause false losses.
-# The initial add-assignee (above) is best-effort and may have transiently failed, leaving the
-# bot off the assignee list. Rather than strand the (otherwise confirmed) claim in-progress, try
-# one re-add; if that also fails, roll the issue back cleanly to status:agent-ready — delete our
-# (visible) claim comment and reset the label — so the next claimer finds it clean (exit 2).
-if ! echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null; then
-  if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" >/dev/null; then
-    log ERROR "bot not an assignee on #$issue and re-add failed, rolling back to agent-ready"
-    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
-    [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
-    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null || true
-    exit 2
-  fi
-fi
-
 # 4. tie-break on distinct claim tokens (single bot ⇒ assignee count can't discriminate).
+# This runs BEFORE the assignee-presence check below on purpose: a loser must exit by
+# touching ONLY its own claim (delete its comment, drop its own assignee) and never the
+# shared label. If the assignee rollback (which resets the label to status:agent-ready)
+# ran first, a loser whose assignee re-add transiently failed could reset the WINNER's
+# in-progress issue back to the queue and cause a double-claim.
 # Only bot-authored claim comments count — any GitHub user can post "claim: …", so an
 # unfiltered count would let an outsider force a false race loss or steer the winner.
 ntok=$(echo "$view" | jq --arg b "$BOT" '[.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | .body] | unique | length')
@@ -100,6 +89,26 @@ if [ "$ntok" -ge 2 ]; then
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
     gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" >/dev/null || true
     log INFO "lost claim race on #$issue (winner=$winner)"
+    exit 2
+  fi
+fi
+
+# 5. spec §5.2 step 3 (adapted): verify the bot is among the assignees. We deliberately do
+# NOT enforce the spec's literal "exactly 1 assignee" — under the single-bot model the
+# authoritative race discriminator is the claim-token count (above; see "Single-bot claim
+# discriminator" in the plan header), and a human may legitimately co-assign an issue, so
+# an exactly-1 check would cause false losses. The tie-break has already run, so reaching
+# here means we are the confirmed winner; the label rollback below cannot strand a rival.
+# The initial add-assignee (above) is best-effort and may have transiently failed, leaving the
+# bot off the assignee list. Rather than strand the (otherwise confirmed) claim in-progress, try
+# one re-add; if that also fails, roll the issue back cleanly to status:agent-ready — delete our
+# (visible) claim comment and reset the label — so the next claimer finds it clean (exit 2).
+if ! echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null; then
+  if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" >/dev/null; then
+    log ERROR "bot not an assignee on #$issue and re-add failed, rolling back to agent-ready"
+    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
+    [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
+    gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null || true
     exit 2
   fi
 fi

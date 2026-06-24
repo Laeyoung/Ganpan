@@ -12,6 +12,15 @@ echo "$*" >> "$GH_CALLS"
 if [ -n "${GH_FAIL_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_FAIL_MATCH"; then
   exit 1
 fi
+# GH_API_404_MATCH (extended regex): simulate a *genuine* HTTP 404 on a matching call —
+# print gh's "(HTTP 404)" message to stderr and exit 1, WITHOUT consuming a queued read
+# slot. Distinct from GH_FAIL_MATCH (a generic non-zero exit with NO message): callers that
+# must tell a real 404 ("resource absent") apart from a transient/permission error can be
+# exercised both ways. Checked before the read-emitting clauses so it never reads a slot.
+if [ -n "${GH_API_404_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_API_404_MATCH"; then
+  echo "gh: Branch not protected (HTTP 404)" >&2
+  exit 1
+fi
 # `gh api user` (the actor-identity probe) — emit a configurable login WITHOUT
 # consuming a queued-response slot. Standalone case BEFORE the queue-emitting one;
 # 3-word expansion so "api user "* matches `gh api user --jq .login`.
