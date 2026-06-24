@@ -17,11 +17,20 @@ Do exactly this:
    else
      LANE_DIR="$REPO_ROOT/.claude/commands"; MODE=copyin
    fi
-   test -f "$REPO_ROOT/.claude/orchestration.json" || { echo "not a configured repo root — run from the main checkout"; exit 1; }
+   # Config discovery mirrors resolve_config_path: prefer .ganpan/, fall back to legacy .claude/.
+   # (Hardcoding .claude/ here would make the launcher dead on a .ganpan-only repo even though
+   # every lane script resolves the config fine.)
+   if [ -f "$REPO_ROOT/.ganpan/orchestration.json" ]; then
+     CFG="$REPO_ROOT/.ganpan/orchestration.json"
+   elif [ -f "$REPO_ROOT/.claude/orchestration.json" ]; then
+     CFG="$REPO_ROOT/.claude/orchestration.json"
+   else
+     echo "not a configured repo root — run from the main checkout"; exit 1
+   fi
    test -f "$LANE_DIR/triage.md" || { echo "lane files not found under $LANE_DIR"; exit 1; }
-   echo "MODE=$MODE  REPO_ROOT=$REPO_ROOT  LANE_DIR=$LANE_DIR"
+   echo "MODE=$MODE  REPO_ROOT=$REPO_ROOT  LANE_DIR=$LANE_DIR  CFG=$CFG"
    ```
-   If either `test` fails, **stop and report** — do not spawn agents.
+   If the config is missing or the lane `test` fails, **stop and report** — do not spawn agents.
 
 2. **Active-sweep lease — no-op an overlapping `/loop` tick.** This launcher returns without waiting for the agents it spawns, so under `/loop <interval> /ganpan:run-all` a sweep that outlasts the interval would otherwise let the next tick stack a fresh batch on top of the running one. Guard against that with a short-lived lease keyed per repo. Run this **before spawning** (the lease is repo-scoped so two different checkouts don't block each other):
    ```bash
@@ -41,10 +50,10 @@ Do exactly this:
    ```
    If a fresh lease exists, **stop here and report the no-op** — do not spawn agents. Otherwise the lease is (re)written with a new expiry and you proceed. The TTL is heuristic: the spawned agents outlive this launcher turn, so the lease only approximates the sweep window. Set it (or the `/loop` interval) so a fresh lease reliably covers a normal sweep; a too-short TTL re-admits overlap, a too-long one can skip a legitimately-idle tick (harmless — the next tick recovers).
 
-3. **Spawn all four lanes in parallel — use the Agent tool with `run_in_background: true`, all four in ONE message** so they run concurrently and appear together in Agent View (`claude agents`). The engine is built for concurrent workers (claim lock + WIP gate + reclaim), so parallel lanes are safe. Build each agent's prompt from the shared preamble plus a per-lane tail, substituting the literal step-1 values for `<REPO_ROOT>`, `<LANE_DIR>`, and `<PLUGIN_ROOT>`. **Include the plugin-root sentence only when `MODE=plugin`** — in copy-in mode the lane files already use `./` paths and need no substitution.
+3. **Spawn all four lanes in parallel — use the Agent tool with `run_in_background: true`, all four in ONE message** so they run concurrently and appear together in Agent View (`claude agents`). The engine is built for concurrent workers (claim lock + WIP gate + reclaim), so parallel lanes are safe. Build each agent's prompt from the shared preamble plus a per-lane tail, substituting the literal step-1 values for `<REPO_ROOT>`, `<LANE_DIR>`, `<PLUGIN_ROOT>`, and `<CFG>`. **Include the plugin-root sentence only when `MODE=plugin`** — in copy-in mode the lane files already use `./` paths and need no substitution.
 
    > **Shared preamble (per agent):**
-   > "Run from the main repo root `<REPO_ROOT>`. Read your lane file `<LANE_DIR>/<lane>.md` with the Read tool and follow its steps exactly. *(plugin mode only:)* the lane file references scripts via the env var `${CLAUDE_PLUGIN_ROOT}`, which is **not set in your shell**. In every command you run, replace `${CLAUDE_PLUGIN_ROOT}` with the literal path `<PLUGIN_ROOT>` (e.g. run `<PLUGIN_ROOT>/scripts/orchestration/claim.sh`) — **including any `${CLAUDE_PLUGIN_ROOT}` inside a backgrounded subshell** such as the Coder lane's detached heartbeat loop; a missed token there runs an empty path, so the heartbeat fails silently and a long build's claim is never refreshed, letting reclaim reset the lock mid-work. Do not rely on a `VAR=x cmd` env-prefix or a separate `export` — neither applies to the lane file's inline `${CLAUDE_PLUGIN_ROOT}` expansion. For every orchestration script call also export `REPO_ROOT=<REPO_ROOT>` and prefix `ORCH_CONFIG=<REPO_ROOT>/.claude/orchestration.json` (config lives in the main checkout; you may be inside a worktree that has no `.claude/`). Do exactly one bounded sweep as described below, reply **starting with a single summary line prefixed by your lane name**, then EXIT. Never approve or merge a PR — that is a human action."
+   > "Run from the main repo root `<REPO_ROOT>`. Read your lane file `<LANE_DIR>/<lane>.md` with the Read tool and follow its steps exactly. *(plugin mode only:)* the lane file references scripts via the env var `${CLAUDE_PLUGIN_ROOT}`, which is **not set in your shell**. In every command you run, replace `${CLAUDE_PLUGIN_ROOT}` with the literal path `<PLUGIN_ROOT>` (e.g. run `<PLUGIN_ROOT>/scripts/orchestration/claim.sh`) — **including any `${CLAUDE_PLUGIN_ROOT}` inside a backgrounded subshell** such as the Coder lane's detached heartbeat loop; a missed token there runs an empty path, so the heartbeat fails silently and a long build's claim is never refreshed, letting reclaim reset the lock mid-work. Do not rely on a `VAR=x cmd` env-prefix or a separate `export` — neither applies to the lane file's inline `${CLAUDE_PLUGIN_ROOT}` expansion. For every orchestration script call also export `REPO_ROOT=<REPO_ROOT>` and prefix `ORCH_CONFIG=<CFG>` (the config path resolved in step 1; it lives in the main checkout, and you may be inside a worktree that has no config dir of its own). Do exactly one bounded sweep as described below, reply **starting with a single summary line prefixed by your lane name**, then EXIT. Never approve or merge a PR — that is a human action."
 
    **Per-lane tail:**
    - **Triager** — lane file `triage.md`. Sweep once: run the reclaim step, then classify every current `status:triage` issue. Summary: `Triager: reclaimed <r>, classified <c> (ready <a>, blocked <b>).`
