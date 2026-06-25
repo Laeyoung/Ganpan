@@ -46,14 +46,14 @@ while read -r issue; do
   # rather than aborting the whole sweep (we run in the main shell, so set -e would exit).
   if [ "$(echo "$prs" | jq 'length')" -gt 0 ]; then
     pr=$(echo "$prs" | jq -r '.[0].number')
-    { gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO" \
-      && gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO"; } \
+    { gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO" >/dev/null \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO" >/dev/null; } \
       || { log WARN "#$issue reclaim→blocked failed, skip"; continue; }
     log INFO "#$issue → blocked (open PR #$pr)"
   else
-    { gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" \
-      && gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" \
-      && gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO"; } \
+    { gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null \
+      && gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" >/dev/null \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO" >/dev/null; } \
       || { log WARN "#$issue reclaim→agent-ready failed, skip"; continue; }
     log INFO "#$issue → agent-ready"
   fi
