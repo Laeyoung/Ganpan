@@ -88,16 +88,34 @@ fi
 # so the reviewer-verdict gate is already satisfied. auto-merge.sh self-gates on the flag,
 # base-branch protection, and PR readiness (OPEN + MERGEABLE + CLEAN), and merges ONLY when the
 # human has removed branch protection — the agent never bypasses an active gate.
-AM=$(ORCH_CONFIG="$CFG" scripts/orchestration/auto-merge.sh "$PR")
-if [ "$AM" = "merged" ]; then
-  : # auto-merged — skip the human-merge request; the mergedAt-set transition below fires.
-elif [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
-  gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
-  SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>"
-  # If autoMerge is on but main is still protected, tell the human to disable protection (once).
-  [ "$AM" = "protected" ] && SUMMARY="$SUMMARY"$'\n\n'"> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 \`main\` 브랜치 보호가 활성화되어 자동 머지하지 않았습니다. 자동 머지를 쓰려면 보호를 해제하세요."
-  gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"
-fi
+# `|| true` so the wrapper's exit-2 hard-error paths (error / merge-failed /
+# protect-check-failed) don't abort this block under set -e — we branch on the token.
+AM=$(ORCH_CONFIG="$CFG" scripts/orchestration/auto-merge.sh "$PR") || true
+case "$AM" in
+  merged)
+    : ;; # auto-merged — skip the human-merge request; the mergedAt-set transition below fires.
+  not-ready*)
+    : ;; # autoMerge on but PR not yet OPEN+MERGEABLE+CLEAN (checks pending / conflict). It
+         # auto-merges next tick once green — do NOT post a human-merge request (it would
+         # contradict the pending auto-merge and leave a stale instruction). Just wait.
+  error|merge-failed|protect-check-failed)
+    # autoMerge on but the merge could not complete (API failure, a merge method the repo
+    # disallows, or an inconclusive protection probe). Surface it ONCE so it is not silent,
+    # then wait — do NOT post a "please merge manually" request that would mask the failure.
+    if [ "$(printf '%s' "$VIEW" | bot_marker_pending "automerge-error:" "merge-resolved:")" != "yes" ]; then
+      gh issue comment "$N" --body "automerge-error: $AM — 자동 머지 실패, 다음 틱 재시도 / 사람 확인 필요 (PR #$PR)" --repo "$REPO"
+    fi ;;
+  *)
+    # disabled (autoMerge off — the default) or protected (autoMerge on but base still
+    # protected) → request a human merge as usual.
+    if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
+      gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
+      SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등>"
+      # If autoMerge is on but the base is still protected, tell the human to disable protection (once).
+      [ "$AM" = "protected" ] && SUMMARY="$SUMMARY"$'\n\n'"> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 브랜치 보호가 활성화되어 자동 머지하지 않았습니다. 자동 머지를 쓰려면 보호를 해제하세요."
+      gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"
+    fi ;;
+esac
 gh pr view "$PR" --json state,mergedAt --repo "$REPO"   # poll only; never approve or merge manually
 ```
 When `mergedAt` is set (human-merged or auto-merged): move `status:in-review` → `status:qa`, sync project status to `QA`, and remove the worktree (`git worktree remove "$WORKTREE_BASE/wt-issue-$N"`). Minor non-blocking observations go in the PR review comment, not the lean `merge-requested:` marker, and are not gated.

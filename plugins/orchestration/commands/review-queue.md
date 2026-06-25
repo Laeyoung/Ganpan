@@ -174,26 +174,45 @@ fi
 # followup) is already satisfied. auto-merge.sh self-gates on the flag, base-branch
 # protection, and PR readiness (OPEN + MERGEABLE + CLEAN), and merges ONLY when the human
 # has removed branch protection — the agent never bypasses an active gate.
-AM=$(ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/auto-merge.sh "$PR")
-if [ "$AM" = "merged" ]; then
-  : # PR auto-merged — skip the human-merge request; the mergedAt-set transition below runs.
-elif [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
-  # Not auto-merged (disabled / protected / not-ready / error) → request a human merge.
-  # Post the lean issue marker FIRST (it is the guard key), then the PR summary.
-  # The marker is critical lane state; the PR summary is best-effort narrative.
-  # A crash in the gap drops only the (non-critical) summary and never duplicates
-  # it — the opposite trade-off from R-A, whose reasons are critical payload.
-  gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
-  SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등 — 위 'Review comment format' 따라 구조화>"
-  if [ "$AM" = "protected" ]; then
-    # autoMerge is on but main is still protected → tell the human how to enable it (post once,
-    # inside the guarded block so it is not repeated every tick).
-    SUMMARY="$SUMMARY
+# `|| true` so the wrapper's exit-2 hard-error paths (error / merge-failed /
+# protect-check-failed) don't abort this block under set -e — we branch on the token.
+AM=$(ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/auto-merge.sh "$PR") || true
+case "$AM" in
+  merged)
+    : ;; # PR auto-merged — skip the human-merge request; the mergedAt-set transition below runs.
+  not-ready*)
+    # autoMerge on but the PR is not yet OPEN+MERGEABLE+CLEAN (checks pending / conflict).
+    # auto-merge.sh merges it on a later tick once it goes green, so do NOT post a human-merge
+    # request — that would contradict the pending auto-merge and leave a stale instruction.
+    : ;;
+  error|merge-failed|protect-check-failed)
+    # autoMerge on but the merge could not complete: an API failure, a merge method the repo
+    # disallows (e.g. --merge on a squash-only repo → set AUTO_MERGE_METHOD), or a protection
+    # probe that was inconclusive (not a clean 404). Surface it ONCE so the failure is visible,
+    # then wait — do NOT post a "please merge manually" request that would mask it as routine.
+    if [ "$(printf '%s' "$VIEW" | bot_marker_pending "automerge-error:" "merge-resolved:")" != "yes" ]; then
+      gh issue comment "$N" --body "automerge-error: $AM — 자동 머지 실패, 다음 틱 재시도 / 사람 확인 필요 (PR #$PR)" --repo "$REPO"
+    fi ;;
+  *)
+    # disabled (autoMerge off — the default) or protected (autoMerge on but base still
+    # protected) → request a human merge as usual.
+    if [ "$(printf '%s' "$VIEW" | bot_marker_pending "merge-requested:" "merge-resolved:")" != "yes" ]; then
+      # Post the lean issue marker FIRST (it is the guard key), then the PR summary.
+      # The marker is critical lane state; the PR summary is best-effort narrative.
+      # A crash in the gap drops only the (non-critical) summary and never duplicates
+      # it — the opposite trade-off from R-A, whose reasons are critical payload.
+      gh issue comment "$N" --body "merge-requested: 사람 리뷰어 승인·머지 요청 (자동 머지 아님) — 리뷰 상세는 PR #$PR" --repo "$REPO"
+      SUMMARY="<리뷰 요약: 차단 결함 없음 근거 / minor 관찰 등 — 위 'Review comment format' 따라 구조화>"
+      if [ "$AM" = "protected" ]; then
+        # autoMerge is on but the base is still protected → tell the human how to enable it (post
+        # once, inside the guarded block so it is not repeated every tick).
+        SUMMARY="$SUMMARY
 
-> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 \`main\` 브랜치 보호가 활성화되어 있어 **자동 머지하지 않았습니다**. 자동 머지를 쓰려면 \`main\`의 브랜치 보호를 해제하세요 (보호가 유지되는 동안은 사람이 직접 머지)."
-  fi
-  gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"   # 리뷰 결과는 PR에
-fi
+> ⚠️ \`reviewer.autoMerge\`가 켜져 있지만 베이스 브랜치 보호가 활성화되어 있어 **자동 머지하지 않았습니다**. 자동 머지를 쓰려면 해당 브랜치의 보호를 해제하세요 (보호가 유지되는 동안은 사람이 직접 머지)."
+      fi
+      gh pr comment "$PR" --body "$SUMMARY" --repo "$REPO"   # 리뷰 결과는 PR에
+    fi ;;
+esac
 # Check merge state ONCE; do NOT approve or merge manually, and do NOT busy-poll.
 # (When auto-merge ran, mergedAt is now set and the transition below fires this tick.)
 gh pr view "$PR" --json state,mergedAt --repo "$REPO"
