@@ -19,7 +19,7 @@ If `require_bot_actor` fails, **stop** — `gh` is not acting as the configured 
 For each issue labelled `status:qa`:
 
 1. Get commands via `ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/detect-test-cmd.sh test` (and a regression run if applicable). **Run them and surface the full results in your output**.
-2. **Pass:** `gh issue edit <n> --add-label status:done --remove-label status:qa`; `project_sync <n> "Done"`; clean up the worktree if present.
+2. **Pass:** `gh issue edit <n> --add-label status:done --remove-label status:qa`; `gh issue close <n> --reason completed`; `project_sync <n> "Done"`; clean up the worktree if present. Close the issue explicitly — QA owns the terminal close. The merged PR bodies do not carry a `Closes #<n>` keyword, so GitHub never auto-closes on merge; relying on it leaves `status:done` issues open. Closing an already-closed issue is a harmless no-op.
 3. **Fail — rework routing.** Read the current max `qa-fail-count: <N>` **only from comments authored by the bot** (`select(.author.login == "<bot>")` — any GitHub user can post a `qa-fail-count:` comment to spoof the count and force a premature block/skip); let `M = N + 1`.
    - **M == 1:** create a regression issue first (`gh issue create ... ` then label it `status:triage`). Only after the regression issue exists, comment on the original issue with both `qa-fail-count: 1` and the linked regression issue number, include `rework-requested: QA 실패 — <summary>`, then `gh issue edit <n> --add-label status:in-progress --remove-label status:qa`.
    - **M >= 2:** `gh issue edit <n> --add-label status:blocked --remove-label status:qa` (route to a human).
