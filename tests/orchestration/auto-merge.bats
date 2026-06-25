@@ -113,16 +113,16 @@ write_config() {
 @test "captured stdout stays exactly 'merged' even when gh pr merge leaks a URL" {
   # Regression guard for the ISSUE=$(claim.sh)-class bug applied to AM=$(auto-merge.sh):
   # real `gh pr merge` prints a confirmation line on success. With GH_EMIT_WRITE_URL the
-  # stub mimics that. auto-merge.sh isolates the merge via merge_out=$(… 2>&1), so its OWN
-  # stdout must remain the bare token — this asserts that and would fail if the 2>&1
-  # capture were ever dropped.
+  # stub mimics that. auto-merge.sh must keep that line off its OWN stdout (it captures the
+  # merge into merge_out=$(…)), so the only thing on stdout is the `merged` token. This
+  # fails if `gh pr merge` is ever invoked so its stdout reaches the script's stdout — e.g.
+  # called bare (`gh pr merge … && echo merged`) instead of captured into a local.
   export GH_EMIT_WRITE_URL=1
   write_config true
   export GH_API_404_MATCH='branches/main/protection'   # genuine 404 ⇒ not protected
   queue_response '{"state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"main"}'   # gh pr view
   run bash "$SCRIPT" 7
   [ "$status" -eq 0 ]
-  [ "$output" = "merged" ]               # exactly the token — no leaked URL line
-  [[ "$output" != *"STUB-URL"* ]]        # the pr-merge URL never reached auto-merge's stdout
-  grep -q 'pr merge 7' "$GH_CALLS"
+  [ "$output" = "merged" ]               # exactly the token — no leaked URL line (subsumes a STUB-URL check)
+  grep -q 'pr merge 7' "$GH_CALLS"       # the merge actually ran (so the assertion isn't vacuous)
 }
