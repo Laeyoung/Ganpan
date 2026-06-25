@@ -20,7 +20,7 @@ Run from the main repository root.
    ```
 6. Implement the issue — on a rework resume, first read the reviewer's most recent rework narrative from the bot-authored PR comments and reviews (an older merge-request summary or a merge-request retraction note is stale, not a change request) — then run detected test/build commands and surface results.
 7. Commit with Conventional Commits and include `Closes #<ISSUE>`.
-8. Re-run the actor gate (`require_bot_actor`) before this write — the lane-start gate may have run long ago, and an expired `GH_TOKEN` would otherwise create the PR as the wrong actor — then create or update a PR from `issue-<ISSUE>` to `main`.
+8. Re-run the actor gate (`require_bot_actor`) before this write — the lane-start gate may have run long ago, and an expired `GH_TOKEN` would otherwise create the PR as the wrong actor. The PR targets the configured integration branch (`$INTEGRATION_BRANCH` from `load_config`, default `main`); first confirm it exists on the remote (`gh api "repos/$REPO/branches/$INTEGRATION_BRANCH"`) and stop with a clear error if it does not, then create or update the PR from `issue-<ISSUE>` to `$INTEGRATION_BRANCH`.
 9. Sync project status to `In Review` when configured.
 10. Move labels from `status:in-progress` to `status:in-review`.
 11. Stop any background heartbeat. If this was a rework resume, ensure the issue has the new `rework-resolved:` marker.
