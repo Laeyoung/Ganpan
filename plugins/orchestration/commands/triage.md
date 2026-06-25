@@ -19,6 +19,14 @@ require_bot_actor || exit 1
 If `require_bot_actor` fails, **stop** — `gh` is not acting as the configured bot. Export the bot PAT (`export GH_TOKEN=github_pat_...`) and re-run.
 
 1. **Reclaim sweep.** Run `ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/reclaim.sh` (reverts orphaned in-progress locks; skips unresolved-rework and open-PR cases).
-2. **Read triage queue.** `gh issue list --label status:triage --repo "$REPO"`.
-3. For each issue: read it, add area/priority labels as appropriate.
-4. If actionable: `gh issue edit <n> --add-label status:agent-ready --remove-label status:triage`. If ambiguous: post a clarifying question comment and `gh issue edit <n> --add-label status:blocked --remove-label status:triage`.
+2. **Resolve stale blocks.** Re-evaluate `status:blocked` issues and move the actionable ones back into triage. `unblock-check.sh` unblocks an issue only when there is **no bot-authored blocker comment** (a stale/unexplained block) or a **trusted** human (write+ permission or reviewer allowlist) commented **after the latest bot comment** — untrusted commenters never unblock. On a `retriage:` decision, move it to `status:triage` so it flows through the classify step below this same run; on `keep-blocked`, leave it (a recorded blocker still awaits a trusted human).
+   ```bash
+   for n in $(gh issue list --label status:blocked --json number --jq '.[].number' --repo "$REPO"); do
+     case "$(ORCH_CONFIG="$CFG" ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/unblock-check.sh "$n")" in
+       retriage:*) gh issue edit "$n" --add-label status:triage --remove-label status:blocked --repo "$REPO" ;;
+     esac
+   done
+   ```
+3. **Read triage queue.** `gh issue list --label status:triage --repo "$REPO"` (now includes any issues just re-triaged in step 2).
+4. For each issue: read it, add area/priority labels as appropriate.
+5. If actionable: `gh issue edit <n> --add-label status:agent-ready --remove-label status:triage`. If ambiguous: post a clarifying question comment and `gh issue edit <n> --add-label status:blocked --remove-label status:triage`.
