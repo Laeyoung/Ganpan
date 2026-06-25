@@ -59,6 +59,20 @@ setup() {
   grep -q 'issue comment 6 --body reclaimed: orphan lock' "$GH_CALLS"  # notification posted
 }
 
+@test "keep-stdout-clean: gh write URLs never leak to stdout during a reclaim (#29)" {
+  # Real `gh issue edit/comment` print the resource URL on success; the engine convention is
+  # that mutating writes stay off stdout. reclaim.sh isn't $()-captured today, but assert the
+  # contract anyway so a future caller wrapping it can't be corrupted by a leaked URL.
+  export GH_EMIT_WRITE_URL=1
+  queue_response '[{"number":6}]'
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'
+  queue_response '[]'                                              # pr list empty → agent-ready path (3 writes)
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"STUB-URL"* ]]   # no leaked write URL reached stdout
+  grep -q 'issue edit 6 --add-label status:agent-ready' "$GH_CALLS"   # writes still happened
+}
+
 @test "unparseable claim timestamp → skipped (no spurious reclaim)" {
   queue_response '[{"number":10}]'
   queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: BADDATE-botx-h-1"}]}'  # iso_to_epoch → 0
