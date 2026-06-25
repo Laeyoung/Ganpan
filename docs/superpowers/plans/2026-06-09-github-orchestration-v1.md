@@ -1128,7 +1128,7 @@ You are the **QA** lane, intended to run under `/goal`. Run from the main repo r
 For each issue labelled `status:qa`:
 
 1. Get commands via `scripts/orchestration/detect-test-cmd.sh test` (and a regression run if applicable). **Run them and surface the full results in your output** — the /goal evaluator only sees what you write, not tool calls.
-2. **Pass:** `gh issue edit <n> --add-label status:done --remove-label status:qa`; `project_sync <n> "Done"` (source lib.sh first); clean up the worktree if present.
+2. **Pass:** `gh issue edit <n> --add-label status:done --remove-label status:qa`; `gh issue close <n> --reason completed`; `project_sync <n> "Done"` (source lib.sh first); clean up the worktree if present. <!-- close step added 2026-06-25 — see docs/log/2026-06-25-qa-lane-issue-close.md -->
 3. **Fail — rework routing.** Read the current max `qa-fail-count: <N>` from comments; let `M = N + 1`; post `gh issue comment <n> --body "qa-fail-count: $M"`.
    - **M == 1:** create a regression issue (`gh issue create ... ` then label it `status:triage`); on the original post `gh issue comment <n> --body "rework-requested: QA 실패 — <summary>"` and `gh issue edit <n> --add-label status:in-progress --remove-label status:qa`.
    - **M >= 2:** `gh issue edit <n> --add-label status:blocked --remove-label status:qa` (route to a human).

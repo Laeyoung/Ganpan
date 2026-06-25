@@ -199,7 +199,7 @@ ganpan loop review-queue --every 5m
   - `work-issue mark-in-review` must verify the PR exists, is open, and is associated with the issue branch or linked issue before moving `in-progress -> in-review`;
   - `review-queue request-rework` must write a bot-authored `rework-requested:` marker before moving `in-review -> in-progress`;
   - `review-queue mark-qa` must verify the PR is merged before moving `in-review -> qa`;
-  - `qa-check mark-done` must require an evidence file or summary path before moving `qa -> done`;
+  - `qa-check mark-done` must require an evidence file or summary path before moving `qa -> done`, then close the issue (`gh issue close <n> --reason completed`);
   - `qa-check record-failure` must read only bot-authored `qa-fail-count:` markers, create/link a regression issue before mutating original labels on first failure, and block on repeated failures;
   - `qa-check mark-blocked` must require a reason and move only from `status:qa`;
   - all rework/block paths must keep bot-authored marker filtering.
