@@ -60,13 +60,13 @@ case "${1:-} ${2:-}" in
     ;;
 esac
 # Mimic real `gh`, which prints the resource URL to stdout on a successful mutating
-# write (issue edit/comment/create, pr create) even non-interactively. Opt-in via
+# write (issue edit/comment/create, pr create/merge) even non-interactively. Opt-in via
 # GH_EMIT_WRITE_URL so existing tests asserting exact stdout stay unaffected; a script
 # that captures its return via $(…) must keep these off its own stdout. These are
 # WRITES — they do NOT consume a queued-response slot.
 if [ -n "${GH_EMIT_WRITE_URL:-}" ]; then
   case "${1:-} ${2:-}" in
-    "issue edit"|"issue comment"|"issue create"|"pr create")
+    "issue edit"|"issue comment"|"issue create"|"pr create"|"pr merge")
       echo "https://github.com/o/r/issues/STUB-URL" ;;
   esac
 fi
