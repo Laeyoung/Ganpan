@@ -18,7 +18,7 @@ Run from the main repository root.
    ```bash
    ORCH_CONFIG="$CFG" scripts/orchestration/heartbeat.sh "$ISSUE"
    ```
-6. Implement the issue — on a rework resume, first read the reviewer's most recent rework narrative from the bot-authored PR comments and reviews (an older merge-request summary or a merge-request retraction note is stale, not a change request) — then run detected test/build commands and surface results.
+6. Implement the issue — on a rework resume, first read the reviewer's most recent rework narrative from the bot-authored PR comments and reviews (an older merge-request summary or a merge-request retraction note is stale, not a change request) — then run detected test/build commands and surface results. On a resume, also bring the branch up to date with `main` via `scripts/orchestration/conflict-resolve.sh main`: `resolved` merges `main` in cleanly (re-run tests to validate) and `up-to-date` is a no-op; `conflict` means a genuine conflict that must **not** be auto-resolved — escalate to a human with a PR comment and leave it for them (never hand-edit conflict markers).
 7. Commit with Conventional Commits and include `Closes #<ISSUE>`.
 8. Re-run the actor gate (`require_bot_actor`) before this write — the lane-start gate may have run long ago, and an expired `GH_TOKEN` would otherwise create the PR as the wrong actor — then create or update a PR from `issue-<ISSUE>` to `main`.
 9. Sync project status to `In Review` when configured.

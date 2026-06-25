@@ -169,6 +169,22 @@ if [ "$GATE_OPEN" = "yes" ]; then
   gh issue comment "$N" --body "decision-resolved: proceed" --repo "$REPO"
   gh issue edit "$N" --remove-label status:needs-decision --repo "$REPO"
 fi
+# Conflict routing: a PR that conflicts with base cannot be merged. The Reviewer never resolves
+# conflicts itself — it routes the PR back to the Coder as rework, whose resume path runs
+# conflict-resolve.sh (clean 3-way auto-merge, or escalate to a human if genuinely unresolvable).
+# This keeps the merge gate intact (no merge here). The rework-pending guard prevents re-routing
+# while the Coder is already on it; the Coder leaves a genuinely-unresolvable conflict
+# status:in-progress (no rework-resolved:), so it does not bounce back here and loop.
+CONFLICTING=$(gh pr view "$PR" --json mergeable --jq '.mergeable' --repo "$REPO")
+if [ "$CONFLICTING" = "CONFLICTING" ] && [ "$(printf '%s' "$VIEW" | bot_marker_pending "rework-requested:" "rework-resolved:")" != "yes" ]; then
+  gh pr comment "$PR" --body "base(\`main\`)와 충돌 — 브랜치를 최신 \`main\`에 맞춰 재정리해 주세요 (워크플로가 자동 해소를 시도하고, 불가하면 사람에게 에스컬레이션합니다)." --repo "$REPO"
+  gh issue comment "$N" --body "rework-requested: base 충돌 해소 필요 — 상세는 PR #$PR" --repo "$REPO"
+  gh issue edit "$N" --add-label status:in-progress --remove-label status:in-review --repo "$REPO"
+  ORCH_CONFIG="$CFG" project_sync "$N" "In Progress"
+fi
+```
+If the PR is `CONFLICTING`, the block above routed it back to the Coder (or it is already in a rework cycle) — **stop here for this issue and move to the next `status:in-review` issue**; do not run the auto-merge / merge-request blocks below for a conflicting PR. Otherwise continue:
+```bash
 # Auto-merge (opt-in, reviewer.autoMerge — default off). This block is reached only on
 # the R-D "proceed" verdict, so the reviewer-verdict gate (not rework/needs-decision/
 # followup) is already satisfied. auto-merge.sh self-gates on the flag, base-branch
