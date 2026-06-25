@@ -135,7 +135,7 @@ Refs #29"
 
 - [ ] **Step 1: Add the bats version directive (if absent)**
 
-At the top of `tests/orchestration/reclaim.bats`, immediately after the `#!/usr/bin/env bats` shebang line, add (the new tests use `run --separate-stderr` to isolate stdout from `log` stderr):
+Check first: `grep -q 'bats_require_minimum_version' tests/orchestration/reclaim.bats` — if it prints nothing (absent, which is the current state), add, immediately after the `#!/usr/bin/env bats` shebang line (the new tests use `run --separate-stderr` to isolate stdout from `log` stderr):
 
 ```bash
 bats_require_minimum_version 1.5.0
@@ -143,7 +143,7 @@ bats_require_minimum_version 1.5.0
 
 - [ ] **Step 2: Write the two failing tests**
 
-Append to `tests/orchestration/reclaim.bats` (model the queue setup on the existing `#5`/`#6` tests):
+Append to `tests/orchestration/reclaim.bats` (model the queue setup on the existing `#5`/`#6` tests). The three `queue_response` calls map to `reclaim.sh`'s read sequence in order: (1) `gh issue list --label status:in-progress` (the in-progress list), (2) `gh issue view <n> --json comments` (per-issue claim-token read), (3) `gh pr list --head issue-<n>` (open-PR check). The mutating `gh issue edit`/`gh issue comment` writes do **not** consume queue slots (the stub only emits queued responses for read subcommands), so the queue is exactly these three reads — same shape as the existing `#5`/`#6` tests:
 
 ```bash
 @test "open-PR reclaim leaks no write URL to stdout (GH_EMIT_WRITE_URL)" {
@@ -321,9 +321,12 @@ This is a fix (stdout hygiene) → patch bump. Edit `version` from `x.y.Z` to `x
 
 ```bash
 jq . plugins/orchestration/.claude-plugin/plugin.json >/dev/null
+NEW_VER=$(jq -r .version plugins/orchestration/.claude-plugin/plugin.json)
 git add plugins/orchestration/.claude-plugin/plugin.json
-git commit -m "chore(release): bump orchestration to <new-version> for #29"
+git commit -m "chore(release): bump orchestration to ${NEW_VER} for #29"
 ```
+
+(Current version is `1.6.0` → bump to `1.6.1`.)
 
 ---
 
