@@ -29,34 +29,43 @@
 **Interfaces:**
 - Produces: exported env var `INTEGRATION_BRANCH` (string). Equals `branchStrategy.integrationBranch` if present, else `main`.
 
-- [ ] **Step 1: Write the two failing tests**
+- [ ] **Step 1a: Extend the existing "exports expected vars" test to cover the default + export-presence**
 
-Append to `tests/orchestration/lib.bats`:
+This is the back-compat assertion (AC1): the fixture config in `setup()` has **no** `branchStrategy` block, so appending `$INTEGRATION_BRANCH` to this exact-match test proves (a) the var is exported, (b) it defaults to `main`, and (c) no existing var was dropped (the whole pipe-joined string is asserted verbatim). In `tests/orchestration/lib.bats`, find the existing test (≈lines 16-23):
 
 ```bash
-@test "load_config defaults INTEGRATION_BRANCH to main when branchStrategy is absent" {
-  # the existing test fixtures write a config WITHOUT a branchStrategy block, so this
-  # asserts the backward-compatible default for every pre-existing install.
-  run bash -c 'source "$0"; load_config; echo "$INTEGRATION_BRANCH"' "$LIB"
+  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER|$ORCH_CONFIG_PATH"' "$LIB"
   [ "$status" -eq 0 ]
-  [ "$output" = "main" ]
-}
+  [ "$output" = "o/r|botx|3|4|120|15|null|$ORCH_CONFIG" ]
+```
 
+Append `|$INTEGRATION_BRANCH` to the echoed list and `|main` to the expected output:
+
+```bash
+  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER|$ORCH_CONFIG_PATH|$INTEGRATION_BRANCH"' "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "o/r|botx|3|4|120|15|null|$ORCH_CONFIG|main" ]
+```
+
+- [ ] **Step 1b: Add a test for the configured value**
+
+Append to `tests/orchestration/lib.bats` (write a fresh config file — do NOT rewrite `$ORCH_CONFIG` in place):
+
+```bash
 @test "load_config reads INTEGRATION_BRANCH from branchStrategy.integrationBranch when present" {
-  # write a config that DOES set the block, then confirm the export reflects it.
-  printf '%s\n' "$(jq '. + {branchStrategy:{integrationBranch:"develop"}}' "$ORCH_CONFIG")" > "$ORCH_CONFIG"
-  run bash -c 'source "$0"; load_config; echo "$INTEGRATION_BRANCH"' "$LIB"
+  jq '. + {branchStrategy:{integrationBranch:"develop"}}' "$ORCH_CONFIG" > "$BATS_TEST_TMPDIR/cfg2.json"
+  run bash -c 'ORCH_CONFIG="$1" bash -c '\''source "$2"; load_config; echo "$INTEGRATION_BRANCH"'\'' _ "$3"' _ "$BATS_TEST_TMPDIR/cfg2.json" "$LIB"
   [ "$status" -eq 0 ]
   [ "$output" = "develop" ]
 }
 ```
 
-> Note: `$LIB` and `$ORCH_CONFIG` are set by the existing `setup()` in lib.bats (the fixture config has no `branchStrategy` block). Verify by reading the top of `tests/orchestration/lib.bats` before running.
+> Note: `$LIB`, `$ORCH_CONFIG`, and `$BATS_TEST_TMPDIR` are available from the existing `setup()`/bats. Verify by reading the top of `tests/orchestration/lib.bats` before running. If the nested-quote invocation is awkward, an equivalent is to point `resolve_config_path` at `cfg2.json` by exporting `ORCH_CONFIG` for the subshell — the key requirement is the configured file (not the fixture) is the one loaded.
 
 - [ ] **Step 2: Run the tests, expect FAIL**
 
-Run: `bats tests/orchestration/lib.bats --filter INTEGRATION_BRANCH`
-Expected: both FAIL — `$INTEGRATION_BRANCH` is empty (var not yet exported), so output is `""` not `main`/`develop`.
+Run: `bats tests/orchestration/lib.bats`
+Expected: the extended "exports expected vars" test FAILS (output ends `…|$ORCH_CONFIG|`, missing `main`, since the var isn't exported yet) and the new configured-value test FAILS (`$INTEGRATION_BRANCH` empty ≠ `develop`).
 
 - [ ] **Step 3: Add the read + export in `load_config`**
 
@@ -84,7 +93,7 @@ Then add `INTEGRATION_BRANCH` to the `export` line at the end of `load_config`:
 - [ ] **Step 4: Run the tests, expect PASS; confirm no regression**
 
 Run: `bats tests/orchestration/lib.bats`
-Expected: all PASS (including the existing "load_config exports expected vars" test, which does not reference `INTEGRATION_BRANCH` and so is unaffected).
+Expected: all PASS. The "exports expected vars" test now asserts `…|main` (so it actively verifies `INTEGRATION_BRANCH` is exported and defaults to `main`, and that no other var changed), and the configured-value test asserts `develop`.
 
 - [ ] **Step 5: shellcheck**
 
@@ -114,6 +123,8 @@ compatible). Refs #56"
 
 **Interfaces:**
 - Consumes: `INTEGRATION_BRANCH` from Task 1 (`load_config`).
+
+> **Testability note:** these four files are Markdown *instructions to the LLM lane agent*, not executable shell scripts, so there is no bats unit test for the base-branch change or the guard — verification is the grep assertions in Step 6 plus the diff in Step 3. The guard **intentionally fails closed**: any non-zero `gh api` exit (a genuine 404 *or* a transient 403/5xx) blocks PR creation rather than risk misrouting to the repo default branch. The work is already committed on the branch, so a transient block is recovered by the next lane tick / human; the error message names both causes so the operator can tell them apart.
 
 - [ ] **Step 1: Edit the canonical reference**
 
@@ -149,7 +160,7 @@ Then `gh pr create --head "issue-$ISSUE" --base main --title "..." --body "...\n
 with:
 
 ```
-Then confirm the integration branch exists — `gh api "repos/$REPO/branches/$INTEGRATION_BRANCH" >/dev/null 2>&1 || { echo "integration branch '$INTEGRATION_BRANCH' not found on $REPO — create it or set branchStrategy.integrationBranch"; exit 1; }` — and `gh pr create --head "issue-$ISSUE" --base "$INTEGRATION_BRANCH" --title "..." --body "...\n\nCloses #$ISSUE"` (`$INTEGRATION_BRANCH` comes from `load_config`, default `main`).
+Then confirm the integration branch exists — `gh api "repos/$REPO/branches/$INTEGRATION_BRANCH" >/dev/null 2>&1 || { echo "integration branch '$INTEGRATION_BRANCH' not found on $REPO (missing branch, or a transient API error) — create it or set branchStrategy.integrationBranch"; exit 1; }` — and `gh pr create --head "issue-$ISSUE" --base "$INTEGRATION_BRANCH" --title "..." --body "...\n\nCloses #$ISSUE"` (`$INTEGRATION_BRANCH` comes from `load_config`, default `main`).
 ```
 
 - [ ] **Step 5: Edit `commands/work-issue-deep.md` step 7**
@@ -163,7 +174,7 @@ Then `gh pr create --head "issue-$ISSUE" --base main --title "..." --body "...\n
 with:
 
 ```
-Then confirm the integration branch exists — `gh api "repos/$REPO/branches/$INTEGRATION_BRANCH" >/dev/null 2>&1 || { echo "integration branch '$INTEGRATION_BRANCH' not found on $REPO — create it or set branchStrategy.integrationBranch"; exit 1; }` — and `gh pr create --head "issue-$ISSUE" --base "$INTEGRATION_BRANCH" --title "..." --body "...\n\nCloses #$ISSUE"` (link the spec/plan/log docs in the body; `$INTEGRATION_BRANCH` comes from `load_config`, default `main`).
+Then confirm the integration branch exists — `gh api "repos/$REPO/branches/$INTEGRATION_BRANCH" >/dev/null 2>&1 || { echo "integration branch '$INTEGRATION_BRANCH' not found on $REPO (missing branch, or a transient API error) — create it or set branchStrategy.integrationBranch"; exit 1; }` — and `gh pr create --head "issue-$ISSUE" --base "$INTEGRATION_BRANCH" --title "..." --body "...\n\nCloses #$ISSUE"` (link the spec/plan/log docs in the body; `$INTEGRATION_BRANCH` comes from `load_config`, default `main`).
 ```
 
 - [ ] **Step 6: Verify no literal `--base main` remains and the var is referenced**
@@ -280,13 +291,22 @@ Create `docs/log/2026-06-26-branch-strategy.md` per `docs/log/README.md`. It MUS
 - Key decisions: (a) absent block ⇒ `main` for backward compat; (b) shipped template ⇒ `develop` to honor the issue's git-flow default; (c) a runtime branch-existence guard rather than docs-only mitigation; (d) defer `productionBranch` (YAGNI) but name the load_config integration point for B.
 - Alternatives rejected: shipping the template defaulting to `main` (rejected — contradicts the issue's git-flow default; the guard makes `develop` safe); adding `productionBranch` now (rejected — unused dead config); changing `auto-merge.sh` (rejected — already base-aware); a flat top-level `integrationBranch` key (rejected — `branchStrategy.*` namespaces the future production/staging siblings).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit the dev-log FIRST (separate from the bump)**
+
+The log is committed on its own so it survives independently if the version-bump commit is amended/re-bumped at merge time (see the cross-PR note below).
 
 ```bash
-git add plugins/orchestration/.claude-plugin/plugin.json docs/log/2026-06-26-branch-strategy.md
-git commit -m "chore(release): bump orchestration to 1.7.0 for #56; add dev-log
+git add docs/log/2026-06-26-branch-strategy.md
+git commit -m "docs(log): #56 branch-strategy foundation + deferred subsystem B"
+```
+
+- [ ] **Step 6: Commit the version bump separately**
+
+```bash
+git add plugins/orchestration/.claude-plugin/plugin.json
+git commit -m "chore(release): bump orchestration to 1.7.0 for #56
 
 Refs #56"
 ```
 
-> **Cross-PR version note:** main is `1.6.0`; open feat PRs #53/#54 also bump toward `1.7.0`. If one merges first, this PR's version needs re-bumping at merge — flag it in the PR body for the human merge gate.
+> **Cross-PR version note:** main is `1.6.0`; open feat PRs #53/#54 also bump toward `1.7.0`. If one merges first, this PR's version needs re-bumping at merge — flag it in the PR body for the human merge gate. The dev-log is a separate commit (Step 5) so a bump re-do never drops it.
