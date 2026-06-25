@@ -44,16 +44,20 @@ while read -r issue; do
     || { log WARN "#$issue pr-list failed, skip"; continue; }
   # Each branch is guarded so one issue's API failure logs and skips to the next issue
   # rather than aborting the whole sweep (we run in the main shell, so set -e would exit).
+  # Every mutating `gh issue edit/comment` is redirected to /dev/null: `gh` prints the
+  # resource URL on success, and the keep-stdout-clean engine convention (CLAUDE.md Gotchas)
+  # holds even though reclaim.sh isn't itself captured — so the contract can't silently rot
+  # if a caller later wraps it in $(…), and a sweep's stdout stays log-free.
   if [ "$(echo "$prs" | jq 'length')" -gt 0 ]; then
     pr=$(echo "$prs" | jq -r '.[0].number')
-    { gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO" \
-      && gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO"; } \
+    { gh issue edit "$issue" --add-label status:blocked --remove-label status:in-progress --repo "$REPO" >/dev/null \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock, PR #$pr 존재 — 사람 확인 필요" --repo "$REPO" >/dev/null; } \
       || { log WARN "#$issue reclaim→blocked failed, skip"; continue; }
     log INFO "#$issue → blocked (open PR #$pr)"
   else
-    { gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" \
-      && gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" \
-      && gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO"; } \
+    { gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null \
+      && gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" >/dev/null \
+      && gh issue comment "$issue" --body "reclaimed: orphan lock" --repo "$REPO" >/dev/null; } \
       || { log WARN "#$issue reclaim→agent-ready failed, skip"; continue; }
     log INFO "#$issue → agent-ready"
   fi
