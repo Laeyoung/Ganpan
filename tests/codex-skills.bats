@@ -64,6 +64,15 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "qa pass path closes the GitHub issue" {
+  for file in \
+    "$REPO_ROOT/plugins/orchestration/commands/qa-check.md" \
+    "$REPO_ROOT/plugins/orchestration/references/lanes/qa-check.md"; do
+    run grep -Eq 'gh issue close .*--reason completed' "$file"
+    [ "$status" -eq 0 ]
+  done
+}
+
 @test "qa first-failure instructions preserve regression issue audit link" {
   for file in \
     "$REPO_ROOT/plugins/orchestration/commands/qa-check.md" \
