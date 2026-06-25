@@ -1,7 +1,7 @@
 # QA lane explicitly closes the issue on pass
 
 - **Date:** 2026-06-25
-- **Issue / PR:** (none) / TBD
+- **Issue / PR:** no tracking issue (direct fix from a user report) / PR #43
 - **Type:** fix
 
 ## What changed

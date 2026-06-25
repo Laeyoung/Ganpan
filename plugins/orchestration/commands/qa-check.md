@@ -24,4 +24,6 @@ For each issue labelled `status:qa`:
    - **M == 1:** create a regression issue first (`gh issue create ... ` then label it `status:triage`). Only after the regression issue exists, comment on the original issue with both `qa-fail-count: 1` and the linked regression issue number, include `rework-requested: QA 실패 — <summary>`, then `gh issue edit <n> --add-label status:in-progress --remove-label status:qa`.
    - **M >= 2:** `gh issue edit <n> --add-label status:blocked --remove-label status:qa` (route to a human).
 
+A human reopening a closed (`status:done`) issue is outside automated lane handling — no lane resumes a reopened done issue. A human must re-apply `status:triage` to route it back in.
+
 Recommended measurable end-state: `status:qa` queue is empty. Each issue must transition to `done`, `in-progress`, or `blocked`, and the QA output must include the commands and results that justify the transition.

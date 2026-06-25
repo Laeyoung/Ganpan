@@ -237,7 +237,7 @@ Required guards:
 - `work-issue mark-in-review` verifies the PR exists, is open, and is associated with the issue branch or linked issue before moving `status:in-progress -> status:in-review`.
 - `review-queue request-rework` writes a bot-authored `rework-requested:` marker and moves only `status:in-review -> status:in-progress`.
 - `review-queue mark-qa` verifies the PR is merged before `status:in-review -> status:qa`.
-- `qa-check mark-done` requires an evidence file or summary path and moves only `status:qa -> status:done`.
+- `qa-check mark-done` requires an evidence file or summary path, moves only `status:qa -> status:done`, and closes the issue (`gh issue close <n> --reason completed`).
 - `qa-check record-failure` reads only bot-authored `qa-fail-count:` markers, increments the count, and follows the existing QA failure policy: first failure creates/links a regression issue and moves `status:qa -> status:in-progress`; second and later failures move `status:qa -> status:blocked`. On first failure, create the regression issue before mutating the original issue labels; the original issue comment should include both the new `qa-fail-count:` value and the linked regression issue number so the operation can be audited and retried safely.
 - `qa-check mark-blocked` requires a reason and moves only from `status:qa` for non-retryable QA blockers.
 - all rework/block paths preserve bot-authored marker filtering.
