@@ -10,7 +10,7 @@
 - **`lib.sh` `project_sync`:** redirected its trailing `gh project item-edit` write to `>/dev/null` for the same future-proofing reason (called bare by lanes today, never captured).
 - **CLAUDE.md Gotchas:** codified the convention — engine scripts whose stdout is a captured return value keep mutating `gh` write output off stdout (`>/dev/null` or captured into a local), diagnostics go through `log` (stderr), with the explicit `bootstrap-labels.sh` human-facing-output exception.
 - **Tests:** extended the `GH_EMIT_WRITE_URL` regression pattern to the scripts that actually exercise the convention. `gh-stub.sh` now also emits a write URL for `pr merge`; `auto-merge.bats` gained a guard asserting its captured stdout stays exactly `merged` (proven to bite by temporarily dropping the `2>&1` isolation); `reclaim.bats` gained two tests asserting empty, `STUB-URL`-free stdout on both reclaim branches.
-- **Version:** `plugins/orchestration/.claude-plugin/plugin.json` bumped `1.6.0` → `1.6.1` (fix → patch).
+- **Version:** `plugins/orchestration/.claude-plugin/plugin.json` bumped to `1.7.1` (fix → patch). Originally `1.6.0 → 1.6.1`, recomputed to `1.7.1` after rebasing onto `main` (which a sibling PR had advanced to `1.7.0`), per the reviewer's rework request.
 
 ## Why
 Follow-up from #4 / PR #28, which fixed `ISSUE=$(claim.sh)` capture corruption by redirecting `gh` write URLs. The Reviewer flagged that the same bug class is latent in every captured engine script, and the convention was never written down — so a new script (or a newly-captured existing one) could silently reintroduce it.
