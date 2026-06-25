@@ -62,10 +62,22 @@ reintroduce the bug):
 2. **Codify the convention** in the repo's developer rules (root `CLAUDE.md`
    Gotchas) so it is enforced going forward.
 3. **Extend regression coverage** of the `GH_EMIT_WRITE_URL` pattern to the
-   scripts that meaningfully exercise the convention:
+   scripts that meaningfully exercise the convention — i.e. those that make a
+   **mutating** `gh` call (only those have a leak vector):
    - `auto-merge.sh` — lock in that its `$()`-captured stdout stays a clean
-     token even when `gh pr merge` leaks a URL.
+     token even when `gh pr merge` leaks a URL. **This requires extending the
+     stub**: `gh-stub.sh`'s `GH_EMIT_WRITE_URL` block currently emits a URL
+     only for `issue edit|comment|create` and `pr create`, **not** `pr merge`.
+     Without adding `pr merge` to that case the test would pass trivially and
+     carry no regression value — so the stub must gain `pr merge` too.
    - `reclaim.sh` — lock in that no write URL reaches stdout after the fix.
+   - The other captured scripts named in the issue — `unblock-check.sh`,
+     `trusted-answers.sh`, `decision-resolve.sh`, `followup-dedup.sh` — are
+     **deliberately excluded** from new `GH_EMIT_WRITE_URL` tests: they make
+     **no** mutating `gh` call (read-only `gh issue view` / `gh api …/comments`
+     captured into local vars, or no `gh` at all), so they have no leak vector
+     and such a test would be a trivial no-op. The audit (above) confirms they
+     are already clean; that is the verification for them, not a new test.
 
 ## Non-goals
 
@@ -89,25 +101,34 @@ reintroduce the bug):
   `gh api --method DELETE … >/dev/null 2>&1 || true` best-effort cleanups in
   `claim.sh` are already correct and unchanged.)
 - Tests use `bats`; the fake `gh` stub already supports `GH_EMIT_WRITE_URL`
-  (`tests/orchestration/helpers/gh-stub.sh`). No new test infrastructure.
+  (`tests/orchestration/helpers/gh-stub.sh`). The only stub change is adding
+  `pr merge` to its existing `GH_EMIT_WRITE_URL` case (see goal 3) — no new
+  test infrastructure.
 - Shipped artifacts under `plugins/` change → bump
   `plugins/orchestration/.claude-plugin/plugin.json` (fix → patch).
 
 ## Acceptance criteria
 
 1. `reclaim.sh` and `lib.sh` `project_sync` redirect their mutating `gh`
-   write stdout to `>/dev/null`; their exit-status and `|| log WARN` branches
-   are unchanged. `shellcheck` passes on both.
+   write stdout to `>/dev/null` (placed on each individual `gh` call); their
+   exit-status and `|| log WARN` branches are unchanged. `shellcheck` passes:
+   `shellcheck plugins/orchestration/scripts/orchestration/*.sh` exits 0.
 2. Root `CLAUDE.md` documents the keep-stdout-clean convention: engine
    scripts whose stdout is a captured return value must send mutating `gh`
    success output to `/dev/null` (or stderr); names the `bootstrap-labels.sh`
    human-facing-output exception.
-3. `tests/orchestration/auto-merge.bats` gains a test asserting the captured
-   stdout is exactly the expected token (e.g. `merged`) under
-   `GH_EMIT_WRITE_URL=1` — no `STUB-URL` leaks.
-4. `tests/orchestration/reclaim.bats` gains a test asserting no `STUB-URL`
-   reaches stdout under `GH_EMIT_WRITE_URL=1` for both the open-PR
-   (`→ blocked`) and no-PR (`→ agent-ready`) reclaim branches.
+3. `gh-stub.sh`'s `GH_EMIT_WRITE_URL` case is extended to also emit a URL for
+   `pr merge`. `tests/orchestration/auto-merge.bats` gains a test asserting
+   that, under `GH_EMIT_WRITE_URL=1` on a mergeable PR, captured stdout is
+   exactly `merged` and contains no `STUB-URL` substring.
+4. `tests/orchestration/reclaim.bats` gains a test asserting that, under
+   `GH_EMIT_WRITE_URL=1`, `reclaim.sh` stdout contains no `STUB-URL` substring
+   for both the open-PR (`→ blocked`) and no-PR (`→ agent-ready`) reclaim
+   branches. (`reclaim.sh` has no stdout return token — it returns via exit
+   code and logs to stderr — so the positive assertion is that stdout is
+   empty.) Both branches are covered because each invokes a distinct set of
+   the `gh issue edit`/`gh issue comment` calls touched by this fix; a
+   single-branch test would leave the other call site unguarded.
 5. Full suite green: `bats tests/*.bats tests/orchestration/*.bats`.
 6. `plugins/orchestration/.claude-plugin/plugin.json` version bumped (patch).
 7. A `docs/log/` entry records the audit outcome, the fixes, and the
