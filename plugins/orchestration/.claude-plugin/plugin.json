@@ -1,6 +1,6 @@
 {
   "name": "ganpan",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "GitHub-native agent orchestration: Triager/Coder/Reviewer/QA lanes over Issues/PRs/labels, plus /orch-setup.",
   "author": { "name": "Laeyoung Chang" }
 }
