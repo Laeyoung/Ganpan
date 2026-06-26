@@ -63,6 +63,7 @@ mk_copyin() {
   [[ "$output" == *"mode:"*"copy-in"* ]]
   [[ "$output" == *"installed:"*"1.5.0"* ]]
   [[ "$output" == *"latest:"*"9.9.9"* ]]
+  [[ "$output" == *"update available"* ]]    # the update-available status (1.5.0 < 9.9.9)
   [[ "$output" == *"install.sh"* ]]
   [[ "$output" == *"--force"* ]]
 }
@@ -111,7 +112,7 @@ mk_copyin() {
 }
 ```
 
-> Note on the script-relative fallback: in bats `$DIR` resolves to the real source tree, so the plugin tests use `GANPAN_PLUGIN_MANIFEST` to exercise plugin resolution without touching the source. `GH_EXIT=1` makes the stub fail the `gh api` call so `version-check.sh` prints `unknown` (verify `gh-stub.sh` honors `GH_EXIT`).
+> Notes: in bats `$DIR` resolves to the real source tree, so the plugin tests use `GANPAN_PLUGIN_MANIFEST` to exercise plugin resolution without touching the source. `GH_EXIT=1` makes the stub exit non-zero on the `gh api` call so `version-check.sh` prints `unknown` — it is checked *after* the read-branch so it consumes **no** queue slot; the offline test therefore needs **no** `queue_response` (do not add one). `gh-stub.sh` honors `GH_EXIT` (confirm before running).
 
 - [ ] **Step 2: Run tests, expect FAIL**
 
@@ -166,7 +167,14 @@ rm -rf "$state" 2>/dev/null || true
 
 case "$vc" in
   "update-available: "*) latest="${vc##*-> }"; status="update available" ;;
-  current)               latest="$installed"; status="up to date" ;;
+  current)
+    if [ "$installed" = "unknown" ]; then
+      # installed unknown ⇒ probe was the synthetic 0.0.0; a `current` verdict here means
+      # the lookup couldn't give us a real latest to show. Don't claim "up to date".
+      latest="unknown"; status="could not determine latest"
+    else
+      latest="$installed"; status="up to date"
+    fi ;;
   *)                     latest="unknown";    status="could not determine latest" ;;
 esac
 
@@ -297,15 +305,24 @@ In `tests/install.bats`, in the "install copies engine, commands, assets" test (
   [ -f "$TARGET/.claude/commands/update.md" ]
 ```
 
-- [ ] **Step 5: Run install + codex tests + shellcheck**
+- [ ] **Step 5: Add `ganpan-update` to the hardcoded skill lists in the tests**
+
+Two tests iterate a **hardcoded** skill list (they pass silently without the new skill — false green). Add `ganpan-update`:
+- `tests/codex-skills.bats` (~line 10): the required-frontmatter loop `for name in ganpan-triage ganpan-work-issue ganpan-review-queue ganpan-qa-check ganpan-setup` → append ` ganpan-update`.
+- `tests/install.bats` (codex-target test, ~line 110): add an assertion `[ -f "$TARGET/.agents/skills/ganpan-update/SKILL.md" ]`.
+- Do **not** touch the "installed codex skills resolve references" loop (`for lane in triage work-issue review-queue qa-check setup`) — `ganpan-update` has no `references/` lane file, so it is correctly excluded.
+
+> Verify line numbers by reading the files first (`grep -n 'for name in ganpan-' tests/codex-skills.bats` and `grep -n 'agents/skills' tests/install.bats`).
+
+- [ ] **Step 6: Run install + codex tests + shellcheck**
 
 Run: `bats tests/install.bats tests/codex-skills.bats && shellcheck install.sh`
-Expected: PASS; shellcheck exit 0. (`codex-skills.bats` validates skill structure — confirm the new skill conforms; if it asserts a fixed skill list, add `ganpan-update`.)
+Expected: PASS; shellcheck exit 0.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add plugins/orchestration/commands/update.md plugins/ganpan-codex/skills/ganpan-update install.sh tests/install.bats
+git add plugins/orchestration/commands/update.md plugins/ganpan-codex/skills/ganpan-update install.sh tests/install.bats tests/codex-skills.bats
 git commit -m "feat(orch): /ganpan:update command + Codex skill + install wiring
 
 Advisory command/skill presenting update-info.sh; install.sh ships
@@ -355,6 +372,7 @@ Create `docs/log/2026-06-26-ganpan-update-command.md` per `docs/log/README.md`, 
 - [ ] **Step 6: Commit (log first, then bump — so the log survives a merge-time re-bump)**
 
 ```bash
+# omit plugins/orchestration/assets/CLAUDE.md from the add if Step 2 left it unchanged (no-op).
 git add docs/SETUP.md plugins/orchestration/assets/CLAUDE.md docs/log/2026-06-26-ganpan-update-command.md
 git commit -m "docs: document /ganpan:update advisory command (#55)"
 git add plugins/orchestration/.claude-plugin/plugin.json
