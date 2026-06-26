@@ -29,11 +29,15 @@ Bring `work-issue-deep.md`'s rework-resume path to parity with `work-issue.md`'s
    - `up-to-date` → nothing to merge; continue.
    - `resolved` → `main` merged cleanly; the 5f re-verify validates the merged tree; push the merge with the rest in step 7.
    - `conflict` → escalate to a human via `gh pr comment "$PR"`, keep the issue `status:in-progress`, do **not** post `rework-resolved:`, and **skip the step 9 transition** (loop prevention) — still stop the heartbeat.
-2. `work-issue-deep.md` step 9 gains the "skip this whole step if 5g escalated an unresolved `conflict`" clause (mirroring `work-issue.md` step 9), so a conflicted resume parks on the human instead of returning to `status:in-review`.
-3. A regression test asserts `work-issue-deep.md`'s resume path contains the `conflict-resolve.sh` invocation and the three-outcome handling (guards against the step being dropped again). It lives alongside the existing lane-content invariants (`tests/codex-skills.bats`, the "work-issue reference preserves rework resume safety steps" test).
-4. No change to `conflict-resolve.sh`, `references/lanes/`, or `plugins/ganpan-codex/` (documented as N/A above).
+2. `work-issue-deep.md` step 9 gains the "**Skip this whole step** if 5g escalated an unresolved `conflict`" clause (mirroring `work-issue.md` step 9, which references "step 5" — here it references **5g**), so a conflicted resume parks on the human instead of returning to `status:in-review`. The heartbeat is still stopped.
+3. A regression test (in `tests/codex-skills.bats`, next to the "work-issue reference preserves rework resume safety steps" test) asserts `work-issue-deep.md` contains **each** of these exact strings — so neither the conflict step nor the loop-prevention skip can be dropped without the test going red:
+   - `conflict-resolve.sh main` — the invocation.
+   - `up-to-date` — the up-to-date outcome branch.
+   - `자동 해소 불가` — the conflict-escalation `gh pr comment` body (distinguishes the `conflict` branch; mirrors `work-issue.md`).
+   - `Skip this whole step` — the step-9 loop-prevention skip clause (the core safety property; currently absent in `work-issue-deep.md`, so this assertion fails before the fix).
+4. No change to `conflict-resolve.sh`, `references/lanes/`, or `plugins/ganpan-codex/`. Verifiable evidence for "no Codex mirror": `ls plugins/ganpan-codex/skills/` shows no `ganpan-work-issue-deep` directory, and `ls plugins/orchestration/references/lanes/` has no `work-issue-deep.md` — work-issue-deep is a Claude command with no Codex/shared-reference twin.
 5. Full suite green: `bats tests/*.bats tests/orchestration/*.bats`; `shellcheck` clean (no shell files changed, but run it); JSON manifests valid.
-6. `plugin.json` bumped (fix → patch) against `main` at implementation time.
+6. `plugin.json` bumped (fix → patch) against `main` at implementation time — increment from the **current `main`** version (baseline is `1.9.0` today, but concurrent PRs move it: merge/rebase `main` immediately before the bump and compute the patch from main's then-current version, not the branch baseline; the human merge gate resolves any residual collision).
 7. A `docs/log/` entry records the parity fix, the loop-prevention rationale, and rejected alternatives.
 
 ## Non-goals
