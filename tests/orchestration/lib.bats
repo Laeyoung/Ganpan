@@ -17,9 +17,19 @@ JSON
   # ORCH_CONFIG_PATH must echo the explicit $ORCH_CONFIG: detect-test-cmd.sh reads
   # that var directly, so a regression that fails to export it for the explicit
   # path would silently make the script read from an empty path.
-  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER|$ORCH_CONFIG_PATH"' "$LIB"
+  # INTEGRATION_BRANCH is appended here so this exact-match assertion doubles as the
+  # backward-compat check: the fixture config has no branchStrategy block, so it must
+  # default to "main", and the verbatim pipe-join proves no existing var was dropped.
+  run bash -c 'source "$0"; load_config; echo "$REPO|$BOT|$CANDIDATE_N|$WIP_LIMIT|$RECLAIM_TIMEOUT_MIN|$HEARTBEAT_MIN|$PROJECT_NUMBER|$ORCH_CONFIG_PATH|$INTEGRATION_BRANCH"' "$LIB"
   [ "$status" -eq 0 ]
-  [ "$output" = "o/r|botx|3|4|120|15|null|$ORCH_CONFIG" ]
+  [ "$output" = "o/r|botx|3|4|120|15|null|$ORCH_CONFIG|main" ]
+}
+
+@test "load_config reads INTEGRATION_BRANCH from branchStrategy.integrationBranch when present" {
+  jq '. + {branchStrategy:{integrationBranch:"develop"}}' "$ORCH_CONFIG" > "$BATS_TEST_TMPDIR/cfg2.json"
+  ORCH_CONFIG="$BATS_TEST_TMPDIR/cfg2.json" run bash -c 'source "$0"; load_config; echo "$INTEGRATION_BRANCH"' "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "develop" ]
 }
 
 @test "load_config fails clearly when config missing" {
