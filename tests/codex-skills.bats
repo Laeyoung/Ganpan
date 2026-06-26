@@ -90,6 +90,20 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "work-issue-deep resume path runs conflict-resolve with loop-prevention skip" {
+  cmd="$REPO_ROOT/plugins/orchestration/commands/work-issue-deep.md"
+  run grep -q 'conflict-resolve.sh main' "$cmd"   # the invocation
+  [ "$status" -eq 0 ]
+  run grep -q 'up-to-date' "$cmd"                  # the up-to-date outcome branch
+  [ "$status" -eq 0 ]
+  run grep -q 'merged in cleanly' "$cmd"           # the resolved outcome branch (distinct from 'rework-resolved:')
+  [ "$status" -eq 0 ]
+  run grep -q '자동 해소 불가' "$cmd"               # the conflict-escalation gh pr comment body
+  [ "$status" -eq 0 ]
+  run grep -q 'Skip this whole step' "$cmd"        # the step-9 loop-prevention skip (core safety property)
+  [ "$status" -eq 0 ]
+}
+
 @test "claude setup command respects the shared config contract" {
   setup_cmd="$REPO_ROOT/plugins/orchestration/commands/orch-setup.md"
   run grep -q '.ganpan/orchestration.json' "$setup_cmd"
