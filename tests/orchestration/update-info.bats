@@ -31,6 +31,17 @@ mk_copyin() {
   [[ "$output" == *"--force"* ]]
 }
 
+@test "copy-in: detected from a subdirectory (upward walk), not just repo root" {
+  mk_copyin "$BATS_TEST_TMPDIR/repo" 1.5.0
+  mkdir -p "$BATS_TEST_TMPDIR/repo/some/nested/dir"
+  queue_response '{"version":"9.9.9"}'
+  cd "$BATS_TEST_TMPDIR/repo/some/nested/dir"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"mode:"*"copy-in"* ]]
+  [[ "$output" == *"installed:"*"1.5.0"* ]]
+}
+
 @test "plugin: reports mode, manifest version (via GANPAN_PLUGIN_MANIFEST), and /plugin guidance" {
   mkdir -p "$BATS_TEST_TMPDIR/empty"                   # cwd with no ./scripts/orchestration
   printf '{"version":"1.5.0"}' > "$BATS_TEST_TMPDIR/manifest.json"

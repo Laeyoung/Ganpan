@@ -9,12 +9,24 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SLUG="${GANPAN_SOURCE_REPO:-Laeyoung/Ganpan}"
 
 # --- install mode + installed version ---
-# copy-in iff the local engine lib.sh carries the install sentinel (not mere file
-# existence — avoids a false positive for an unrelated ./scripts/orchestration dir).
+# copy-in iff an enclosing dir has scripts/orchestration/lib.sh carrying the install
+# sentinel (not mere file existence — avoids a false positive for an unrelated
+# scripts/orchestration dir). Walk UP from cwd so the command works from any
+# subdirectory of a copy-in repo, not just its root.
+copyin_lib=""
+d="$PWD"
+while :; do
+  if [ -f "$d/scripts/orchestration/lib.sh" ] && grep -q 'ganpan-orchestration:' "$d/scripts/orchestration/lib.sh" 2>/dev/null; then
+    copyin_lib="$d/scripts/orchestration/lib.sh"; break
+  fi
+  [ "$d" = "/" ] && break
+  d="$(dirname "$d")"
+done
+
 installed=""
-if [ -f "./scripts/orchestration/lib.sh" ] && grep -q 'ganpan-orchestration:' "./scripts/orchestration/lib.sh" 2>/dev/null; then
+if [ -n "$copyin_lib" ]; then
   mode="copy-in"
-  installed="$(grep -o 'ganpan-orchestration: v[0-9][0-9.]*' "./scripts/orchestration/lib.sh" | head -1 | sed 's/.*v//')"
+  installed="$(grep -o 'ganpan-orchestration: v[0-9][0-9.]*' "$copyin_lib" | head -1 | sed 's/.*v//')"
 else
   mode="plugin"
   # Resolve the plugin manifest script-relative: update-info.sh lives at
