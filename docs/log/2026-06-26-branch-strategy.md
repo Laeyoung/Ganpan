@@ -1,8 +1,10 @@
 # Configurable branch strategy — foundation (#56)
 
 - **Date:** 2026-06-26
-- **Issue / PR:** #56 / (this PR)
+- **Issue / PR:** #56 / PR #57
 - **Type:** feat
+
+> **Rework (2026-06-26):** PR #57 conflicted after `main` advanced to `1.7.1` (PR #46/#29 merged). Merged latest `main` (only conflict: `plugin.json` version) and re-bumped to **`1.8.0`** (feat → minor from `1.7.1`) per the reviewer. The INTEGRATION_BRANCH changes auto-merged cleanly with `main`'s concurrent edits to `lib.sh` and the lane references; canonical/Codex reference parity re-verified. Full suite green (179 tests).
 
 ## What changed
 - **`load_config`** now reads an **optional** `branchStrategy.integrationBranch` and exports `INTEGRATION_BRANCH` — the branch Coder-lane feature PRs target. An absent block defaults to `main`.
