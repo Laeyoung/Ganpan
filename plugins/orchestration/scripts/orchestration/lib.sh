@@ -45,10 +45,14 @@ load_config() {
   REVIEWER_ALLOWLIST=$(jq -r '.reviewer.allowlist[]? // empty' "$cfg")
   FOLLOWUP_CAP=$(jq -r '.reviewer.followupIssueCapPerPR // 3' "$cfg")
   REVIEWER_AUTO_MERGE=$(jq -r '.reviewer.autoMerge // false' "$cfg")
+  # Optional branch strategy. Absent block ⇒ "main" (backward compatible: feature PRs
+  # target main, the legacy single-branch behavior). branchStrategy.integrationBranch
+  # is the branch Coder-lane feature PRs integrate into (e.g. "develop" for git-flow).
+  INTEGRATION_BRANCH=$(jq -r '.branchStrategy.integrationBranch // "main"' "$cfg")
   # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
   # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
-  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP REVIEWER_AUTO_MERGE
+  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP REVIEWER_AUTO_MERGE INTEGRATION_BRANCH
 }
 
 # require_bot_actor — assert the gh actor matches config.bot before any write.
@@ -118,7 +122,7 @@ project_sync() {
     '.fields[] | select(.name==$n) | .options[] | select(.name==$v) | .id')
   item_id=$(gh project item-list "$PROJECT_NUMBER" --owner "$owner" --format json \
     | jq -er --argjson num "$issue" '.items[] | select(.content.number==$num) | .id')
-  gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id"
+  gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id" >/dev/null
 }
 
 # perm_rank <permission> — comparable rank; unknown/none == -1 (never trusted).

@@ -78,7 +78,7 @@ esac
 ```
 Mode (i) only: close the gate exactly once before falling through to R-D — post `decision-resolved: out-of-scope`, remove `status:needs-decision`, and set `GATE_OPEN=no` so R-D's guard does not post a second `decision-resolved:`. Mode (ii) skips this; its rule-4/rule-7 path owns the gate resolution. cap-exceeded items do not block the merge request.
 
-**R-D — request human merge (or auto-merge when enabled).**
+**R-D — request human merge (or auto-merge when enabled).** First, conflict routing: if `gh pr view "$PR" --json mergeable` is `CONFLICTING` and no rework cycle is already pending, route the PR back to the Coder as rework (`rework-requested: base 충돌 해소 필요`, move `status:in-review` → `status:in-progress`, sync project to In Progress) and move to the next issue — the Reviewer never resolves conflicts itself; the Coder's resume path runs `conflict-resolve.sh` (clean 3-way auto-merge, or escalate to a human if genuinely unresolvable, leaving it `status:in-progress` so it does not loop). The merge gate stays intact.
 ```bash
 if [ "$GATE_OPEN" = "yes" ]; then
   gh issue comment "$N" --body "decision-resolved: proceed" --repo "$REPO"
