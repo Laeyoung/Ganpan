@@ -1,8 +1,10 @@
 # Interactive `/ganpan:update` advisory command (#55)
 
 - **Date:** 2026-06-26
-- **Issue / PR:** #55 / (this PR)
+- **Issue / PR:** #55 / PR #60
 - **Type:** feat
+
+> **Rework (2026-06-26):** rebased onto `main` (advanced to `1.10.1`); resolved `plugin.json` → **`1.11.0`** (feat) and merged the install command-list / `install.bats` additions with the concurrently-landed `review-queue-deep` command (kept both `update` and `review-queue-deep`). Full suite green (193 tests).
 
 ## What changed
 - New read-only engine script `scripts/orchestration/update-info.sh`: detects install mode (copy-in vs plugin), resolves installed vs latest version, and prints the exact per-mode update steps. Exit 0 always.
