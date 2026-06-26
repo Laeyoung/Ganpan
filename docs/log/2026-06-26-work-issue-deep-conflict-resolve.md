@@ -1,8 +1,10 @@
 # work-issue-deep: base-conflict resolution parity (#58)
 
 - **Date:** 2026-06-26
-- **Issue / PR:** #58 / (this PR)
+- **Issue / PR:** #58 / PR #61
 - **Type:** fix (bug)
+
+> **Rework (2026-06-26):** rebased onto `main` (advanced to `1.10.0` via PR #54); only `plugin.json` conflicted → re-bumped to **`1.10.1`** (fix → patch) per the reviewer. The conflict-resolution edits merged cleanly with main. Full suite green (187 tests).
 
 ## What changed
 - `commands/work-issue-deep.md`'s rework-resume path (5g) now runs `conflict-resolve.sh main` before the 5f re-verify and handles its three outcomes (`up-to-date` / `resolved` / `conflict`), mirroring `work-issue.md` step 5.
