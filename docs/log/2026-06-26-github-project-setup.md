@@ -1,8 +1,10 @@
 # GitHub Project integration: docs + verifier (#59)
 
 - **Date:** 2026-06-26
-- **Issue / PR:** #59 / (this PR)
+- **Issue / PR:** #59 / PR #62
 - **Type:** docs + feat
+
+> **Rework (2026-06-26):** rebased onto `main` (advanced to `1.10.1`); only `plugin.json` conflicted → re-bumped to **`1.11.0`** (feat). Full suite green (192 tests).
 
 ## What changed
 - New read-only `scripts/orchestration/project-check.sh`: diagnoses the GitHub Projects status-sync config — confirms the board is reachable as the bot and its status field has the four option names the lanes emit (`In Progress`, `In Review`, `QA`, `Done`), reporting the specific problem otherwise. Exit 0 (not-configured / OK) | 1 (broken).
