@@ -17,13 +17,17 @@ if [ -f "./scripts/orchestration/lib.sh" ] && grep -q 'ganpan-orchestration:' ".
   installed="$(grep -o 'ganpan-orchestration: v[0-9][0-9.]*' "./scripts/orchestration/lib.sh" | head -1 | sed 's/.*v//')"
 else
   mode="plugin"
+  # Resolve the plugin manifest script-relative: update-info.sh lives at
+  # <plugin-root>/scripts/orchestration/, so the manifest is two levels up. This is
+  # robust without any env var (a plugin install always ships the script inside the
+  # plugin). GANPAN_PLUGIN_MANIFEST is a test/override hook. We deliberately do NOT
+  # reference ${CLAUDE_PLUGIN_ROOT} — it is redundant with the script-relative path,
+  # and the install path-drift guard forbids that path token in copied scripts.
   manifest=""
   if [ -n "${GANPAN_PLUGIN_MANIFEST:-}" ] && [ -f "${GANPAN_PLUGIN_MANIFEST}" ]; then
     manifest="$GANPAN_PLUGIN_MANIFEST"
   elif [ -f "$DIR/../../.claude-plugin/plugin.json" ]; then
     manifest="$DIR/../../.claude-plugin/plugin.json"
-  elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json" ]; then
-    manifest="$CLAUDE_PLUGIN_ROOT/.claude-plugin/plugin.json"
   fi
   if [ -n "$manifest" ]; then
     installed="$(jq -r '.version // empty' "$manifest" 2>/dev/null)"
