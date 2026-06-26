@@ -39,6 +39,8 @@ In `tests/codex-skills.bats`, after the "work-issue reference preserves rework r
   [ "$status" -eq 0 ]
   run grep -q 'up-to-date' "$cmd"                  # the up-to-date outcome branch
   [ "$status" -eq 0 ]
+  run grep -q 'merged in cleanly' "$cmd"           # the resolved outcome branch (distinct from 'rework-resolved:')
+  [ "$status" -eq 0 ]
   run grep -q '자동 해소 불가' "$cmd"               # the conflict-escalation gh pr comment body
   [ "$status" -eq 0 ]
   run grep -q 'Skip this whole step' "$cmd"        # the step-9 loop-prevention skip (core safety property)
@@ -67,7 +69,7 @@ make the requested changes. **Conflict resolution (resume only).** Before re-ver
 
 - [ ] **Step 4: Add the skip clause to step 9**
 
-In `work-issue-deep.md`, step 9 currently reads:
+In `work-issue-deep.md`, step 9 currently reads (note the `**` bold markers around "Stop the background heartbeat" — the Edit `old_string` must include them to match):
 
 ```
 9. **Transition.** `gh issue edit "$ISSUE" --add-label status:in-review --remove-label status:in-progress`. **Stop the background heartbeat** (`kill "$(cat "${TMPDIR:-/tmp}/hb-$ISSUE.pid")" 2>/dev/null || true`). If this was a resume, add `gh issue comment "$ISSUE" --body "rework-resolved:"`.
