@@ -16,6 +16,7 @@ setup() {
   [ -f "$TARGET/.claude/commands/work-issue.md" ]
   [ -f "$TARGET/.claude/commands/work-issue-deep.md" ]
   [ -f "$TARGET/.claude/commands/update.md" ]
+  [ -f "$TARGET/.claude/commands/review-queue-deep.md" ]
   [ -f "$TARGET/references/lanes/work-issue.md" ]
   [ -f "$TARGET/.github/labels.yml" ]
   [ -f "$TARGET/.claude/orchestration.json" ]
