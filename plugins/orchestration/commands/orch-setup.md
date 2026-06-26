@@ -56,10 +56,12 @@ Do exactly this:
    - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh). **This is a runtime precondition, not a recommendation** — every lane verifies `gh` is acting as `config.bot` at startup and hard-stops on mismatch.
    - **Add the bot as a collaborator** on the repo.
    - **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, include administrators; the bot must **not** be an admin.
+   - **(Optional) GitHub Project status sync:** to mirror issue status onto a Projects (v2) board, create the board (owned by the same org/user as the repo), ensure its Status single-select field has options named exactly `In Progress`, `In Review`, `QA`, `Done`, enable the board's auto-add workflow so issues become items, set `project.number` in the config, and verify with `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/project-check.sh`. Leave `project.number` null to keep sync off (but keep `project.statusField`).
 6. **Verify (optional).** Confirm labels exist and echo the lane-run commands:
    ```bash
    gh label list --repo "$(jq -r .repo "$CFG")" | grep -c '^status:' || true
    ```
+   If a GitHub Project is configured, also run `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/project-check.sh` to confirm the board's status field has the required options.
    Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`) — or run all four at once from one session with `/loop 20m /run-all` (the launcher; `20m` is an adjustable example).
 
 Never create the PAT or change branch protection yourself — those are human, security-sensitive actions.
