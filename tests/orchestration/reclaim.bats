@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0  # for `run --separate-stderr`
 
 setup() {
   load helpers/common
@@ -115,4 +116,34 @@ setup() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted
   ! grep -q 'issue edit' "$GH_CALLS"
+}
+
+# Regression for the ISSUE=$(claim.sh)/PR #28 bug class: reclaim.sh's mutating
+# gh issue edit/comment writes print the resource URL to stdout on success.
+# reclaim.sh has no stdout return token (it returns via exit code, logging to
+# stderr), so under GH_EMIT_WRITE_URL its stdout must stay EMPTY. The three
+# queued responses map to reclaim.sh's read sequence: (1) issue list, (2) issue
+# view, (3) pr list. The mutating writes do not consume queue slots.
+@test "open-PR reclaim leaks no write URL to stdout (GH_EMIT_WRITE_URL)" {
+  export GH_EMIT_WRITE_URL=1
+  queue_response '[{"number":5}]'
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'  # view
+  queue_response '[{"number":99,"state":"OPEN"}]'                  # pr list --head issue-5
+  run --separate-stderr bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'issue edit 5 --add-label status:blocked' "$GH_CALLS"   # the → blocked path ran
+  [[ "$output" != *"STUB-URL"* ]]                                 # no leaked write URL on stdout
+  [ -z "$output" ]                                                # reclaim returns via exit code; stdout is empty
+}
+
+@test "no-PR reclaim leaks no write URL to stdout (GH_EMIT_WRITE_URL)" {
+  export GH_EMIT_WRITE_URL=1
+  queue_response '[{"number":6}]'
+  queue_response '{"comments":[{"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-1"}]}'  # view
+  queue_response '[]'                                             # pr list empty
+  run --separate-stderr bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'issue edit 6 --add-label status:agent-ready' "$GH_CALLS"  # the → agent-ready path ran
+  [[ "$output" != *"STUB-URL"* ]]
+  [ -z "$output" ]
 }

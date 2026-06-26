@@ -118,7 +118,7 @@ project_sync() {
     '.fields[] | select(.name==$n) | .options[] | select(.name==$v) | .id')
   item_id=$(gh project item-list "$PROJECT_NUMBER" --owner "$owner" --format json \
     | jq -er --argjson num "$issue" '.items[] | select(.content.number==$num) | .id')
-  gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id"
+  gh project item-edit --id "$item_id" --project-id "$proj_id" --field-id "$field_id" --single-select-option-id "$opt_id" >/dev/null
 }
 
 # perm_rank <permission> — comparable rank; unknown/none == -1 (never trusted).
