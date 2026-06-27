@@ -20,8 +20,8 @@ Make merge **not** auto-close the issue, so the documented Reviewer→QA→close
 
 ## Background: GitHub auto-close rules
 - A merged PR whose **body/title** contains `Closes #n` auto-closes #n **iff the PR targets the default branch**.
-- A commit whose message contains `Closes #n` auto-closes #n when it lands on the **default branch** (e.g. a merge commit bringing feature commits onto `main`).
-So both the PR body and the commit footer are auto-close vectors on merge-to-`main`. Non-closing words (`Refs`, `Re`, a bare `#n`) do not auto-close.
+- A commit whose message contains `Closes #n` auto-closes #n when that message lands on the **default branch** — clearest with **squash-merge** (the squash commit carries the footer onto `main`); with a plain merge-commit the dominant vector is the PR body.
+So the PR body is the primary auto-close vector on merge-to-`main`, and the commit footer is an additional one (squash-merge). Neutralizing **both** is the safe, strategy-independent fix. Non-closing references (`Refs #n`, or a bare `#n`) still create the issue↔PR/commit cross-link in the timeline (the autolink comes from `#n`) but do **not** auto-close.
 
 ## Constraints
 - **Never rename engine internals.** This is a copy/convention change to lane instructions + docs; no engine script logic changes.
@@ -33,17 +33,18 @@ So both the PR body and the commit footer are auto-close vectors on merge-to-`ma
 - `plugins/` artifacts change → bump `plugin.json` (fix → patch) from current `main`.
 
 ## Acceptance criteria
-1. No Coder-lane merge-bound artifact uses the auto-closing keyword for the issue ref. Specifically, these contain **no** `Closes #` and use `Refs #` instead:
-   - `plugins/orchestration/commands/work-issue.md` (commit footer + PR body),
-   - `plugins/orchestration/commands/work-issue-deep.md` (PR body),
-   - `plugins/orchestration/references/lanes/work-issue.md` (commit footer),
-   - `plugins/orchestration/assets/CLAUDE.md` (commit footer convention),
-   - `CLAUDE.md` (both Repo-conventions blocks' commit footer line).
-2. The non-closing intent is stated where the convention is defined (`CLAUDE.md` + `assets/CLAUDE.md`): a one-line note that the footer is a **non-closing** reference because **QA owns the terminal close** (the issue auto-closing on merge would skip `qa-check`).
-3. `qa-check.md` and `references/lanes/qa-check.md` comments are corrected: the Coder lanes reference issues with a **non-closing** keyword by design (not "PR bodies often lack it"), so merge never auto-closes and QA owns the close.
-4. A regression test (`tests/codex-skills.bats`, alongside the existing lane-content invariants) asserts each file in AC1 contains no `Closes #` and that the two lane command files + the canonical reference contain `Refs #`. (Fails before the fix.)
+1. No Coder-lane merge-bound artifact uses the auto-closing keyword for the issue ref. Specifically, each of these contains **no** literal `Closes #` (anywhere, incl. any explanatory note) and uses `Refs #` for the issue reference:
+   - `plugins/orchestration/commands/work-issue.md` (commit-footer instruction + the `gh pr create --body "...\n\nCloses #$ISSUE"` argument),
+   - `plugins/orchestration/commands/work-issue-deep.md` (the `gh pr create --body "...\n\nCloses #$ISSUE"` argument at step 7),
+   - `plugins/orchestration/references/lanes/work-issue.md` (commit-footer line; it has no PR-body `Closes` — confirmed),
+   - `plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md` (Codex copy of the canonical reference — same commit-footer `Closes #<ISSUE>` line),
+   - `plugins/orchestration/assets/CLAUDE.md` (commit-footer convention),
+   - `CLAUDE.md` (both duplicated Repo-conventions blocks' commit-footer line).
+2. The non-closing intent is stated where the convention is defined (`CLAUDE.md` + `assets/CLAUDE.md`): a one-line note that the footer is a **non-closing** reference because **QA owns the terminal close** (an issue auto-closing on merge would skip `qa-check`). **The note must paraphrase** (e.g. "non-closing reference — not the auto-closing keyword") and must **not** contain the literal string `Closes #`, since AC4 greps these files for that string.
+3. `qa-check.md` and its Codex copy `plugins/ganpan-codex/skills/ganpan-qa-check/references/qa-check.md`, plus `references/lanes/qa-check.md`, have their comments corrected to state the Coder lanes reference issues with a **non-closing** keyword by design (so merge never auto-closes; QA owns the close). Verifiable: each must contain the string `non-closing` and must **not** contain the old inaccurate phrasing (`often lack it` / `do not carry`). These qa-check files legitimately still contain `Closes #` in explanatory prose and are therefore **excluded** from AC4's no-`Closes #` grep.
+4. A regression test (`tests/codex-skills.bats`, alongside the existing lane-content invariants) asserts: each of the **six AC1 files** contains no literal `Closes #`; and the two lane command files + the canonical reference + its Codex copy contain `Refs #`. The grep set is **exactly** the AC1 files — it must **not** include `qa-check.md`/its references (which keep `Closes #` in prose). (Fails before the fix.)
 5. Full suite green (`bats tests/*.bats tests/orchestration/*.bats`); `shellcheck` clean; JSON manifests valid.
-6. `plugin.json` bumped (fix → patch) from current `main`.
+6. `plugin.json` bumped (fix → patch) from current `main` (baseline `1.10.1` → `1.10.2`; re-fetch `main` immediately before bumping, since concurrent PRs move it — compute from main's then-current version).
 7. A `docs/log/` entry records the auto-close-vectors analysis, the `Refs` decision, and rejected alternatives.
 
 ## Non-goals
