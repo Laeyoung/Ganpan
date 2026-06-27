@@ -63,6 +63,13 @@ old generated surface files first. Subsequent upgrades are automatic.
 - Reviewer:`/loop 5m /review-queue`
 - QA:      `/goal` wrapping `/qa-check` (see `.claude/commands/qa-check.md`)
 
+### Checking for updates
+`/ganpan:update` (Codex: the `ganpan-update` skill) is **advisory**: it shows your
+installed vs latest ganpan version and the exact steps to update — it never changes
+your repo. Plugin installs update via `/plugin` (the marketplace manager); copy-in
+installs re-run `install.sh <repo> --target both --force`. Safe to run anytime,
+including inside a loop (it is read-only and does not prompt).
+
 For Codex repo-local skills, invoke the matching skill in the target repo:
 `ganpan-triage`, `ganpan-work-issue`, `ganpan-review-queue`, or
 `ganpan-qa-check`. Codex CLI/IDE support is the Phase 1 public surface; hosted
