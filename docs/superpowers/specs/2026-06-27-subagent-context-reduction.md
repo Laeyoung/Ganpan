@@ -172,18 +172,23 @@ main-session accumulation is far below half of the inline baseline.
    spawns, so no lane double-nests.
 4. The canonical references (`references/lanes/*.md`) and the Codex skills are
    unchanged; `tests/codex-skills.bats` still passes.
-5. A structural bats test asserts criteria 2 and 3 by grepping for the literal
-   `GANPAN_EXECUTE_INLINE` and the section headings in each of the four commands
-   and in `run-all`. **This test is a regression guard against the pattern being
-   removed or a lane being missed — it confirms the directive is present, not
-   that the LLM-executed dispatch logic behaves correctly.** Behavioral
-   correctness of natural-language command prompts is not unit-testable here and
-   is verified operationally (the design mirrors the already-proven `run-all`
-   pattern). To reduce the "inverted guard" risk the reviewers flagged, the
-   header is written so the `GANPAN_EXECUTE_INLINE` branch is the *inline* path
-   and its absence is the *dispatch* path, matching `run-all`'s usage; the test
-   asserts both the token and that each command still contains its dispatch
-   (`Agent`/subagent) instruction.
+5. A structural bats test asserts criteria 2 and 3 by grepping for these
+   **canonical markers**:
+   - in each of the four in-scope command files: the heading
+     `## Dispatch (loop mode)`, the heading `## Lane procedure`, and the literal
+     `GANPAN_EXECUTE_INLINE`;
+   - in `run-all`: the literal `GANPAN_EXECUTE_INLINE`.
+
+   **This test is a regression guard against the pattern being removed or a lane
+   being missed — it confirms the markers are present, not that the LLM-executed
+   dispatch logic behaves correctly.** Behavioral correctness of natural-language
+   command prompts is not unit-testable here and is verified operationally (the
+   design mirrors the already-proven `run-all` pattern). To reduce the "inverted
+   guard" risk the reviewers flagged, the header is written so the
+   `GANPAN_EXECUTE_INLINE` branch is the *inline* path and its absence is the
+   *dispatch* path, matching `run-all`'s usage; the presence of the
+   `## Dispatch (loop mode)` heading is the canonical marker that the dispatch
+   instruction exists.
 6. `bats tests/*.bats tests/orchestration/*.bats` and `shellcheck` pass; the
    plugin version is bumped (feat → minor).
 
