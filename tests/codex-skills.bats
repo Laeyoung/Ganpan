@@ -7,7 +7,7 @@ setup() {
 }
 
 @test "codex skills include required frontmatter and openai metadata" {
-  for name in ganpan-triage ganpan-work-issue ganpan-review-queue ganpan-qa-check ganpan-setup; do
+  for name in ganpan-triage ganpan-work-issue ganpan-review-queue ganpan-qa-check ganpan-setup ganpan-update; do
     skill="$CODEX_SKILLS/$name/SKILL.md"
     metadata="$CODEX_SKILLS/$name/agents/openai.yaml"
 

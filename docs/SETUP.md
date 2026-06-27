@@ -52,7 +52,12 @@ old generated surface files first. Subsequent upgrades are automatic.
 2. **Add the bot as a collaborator** on the target repo.
 3. **Config:** discovery order is `$ORCH_CONFIG`, `.ganpan/orchestration.json`, then `.claude/orchestration.json`. `/orch-setup` (Claude plugin) writes the Claude config path. `install.sh --target codex` writes `.ganpan/orchestration.json` for new installs. `install.sh` only drops a **template** if no config exists — you must then manually edit it to set `repo`, `bot`, and (optionally) `project.number`. Set `branchStrategy.integrationBranch` to choose where feature PRs land: the shipped template uses `"develop"` (git-flow — create that branch on the remote first), or set `"main"` / omit the block for trunk-style (feature PRs target `main`). Omitting the block defaults to `main`.
 4. **Labels** are bootstrapped by `/orch-setup`. For the copy-in path run `scripts/orchestration/bootstrap-labels.sh .github/labels.yml`.
-5. **(Optional) GitHub Project:** create it, set `project.number`; otherwise leave `null` (sync becomes a no-op).
+5. **(Optional) GitHub Project status sync.** Lanes mirror each issue's status onto a Projects (v2) board via `project_sync` when `project.number` is set (leave it `null` to disable — but keep `project.statusField`, which `load_config` always requires). To enable:
+   1. Create a Projects v2 board owned by the **same org/user as the repo** (the board owner is derived from `repo`).
+   2. On the board's status single-select field (the built-in **Status** field is recommended; field names must be unique), ensure options named **exactly** `In Progress`, `In Review`, `QA`, `Done` — these are the values the lanes set; a missing option makes sync fail.
+   3. Add repo issues to the board as items — enable the board's built-in **auto-add workflow** (Project → Workflows → "Auto-add to project") so issues appear as items; `project_sync` edits an existing item and can't add one.
+   4. Give the bot **Projects access** (the PAT's Projects RW scope) and set `project.number` (and `project.statusField` if not `Status`) in the config.
+   5. Verify: `scripts/orchestration/project-check.sh` — it reports missing access, a wrong/duplicate field, or missing options.
 6. **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, no direct push, **include administrators**, restrict review dismissal. Bot token must **not** be admin.
 7. **Issue template** is already at `.github/ISSUE_TEMPLATE/task.yml` (auto-labels new issues `status:triage`).
 8. **Worktree dependency strategy.** Decide how per-issue worktrees share dependencies (e.g. symlink `node_modules`/`.venv` from the main checkout vs reinstall per worktree). For Node, symlinking the gitignored `node_modules` into each `wt-issue-*` avoids re-install; pick the equivalent for the target repo's toolchain (spec §7.4 step 7 / §12 — repo-specific, decide here).
@@ -62,6 +67,13 @@ old generated surface files first. Subsequent upgrades are automatic.
 - Coder:   `/loop /work-issue`
 - Reviewer:`/loop 5m /review-queue`
 - QA:      `/goal` wrapping `/qa-check` (see `.claude/commands/qa-check.md`)
+
+### Checking for updates
+`/ganpan:update` (Codex: the `ganpan-update` skill) is **advisory**: it shows your
+installed vs latest ganpan version and the exact steps to update — it never changes
+your repo. Plugin installs update via `/plugin` (the marketplace manager); copy-in
+installs re-run `install.sh <repo> --target both --force`. Safe to run anytime,
+including inside a loop (it is read-only and does not prompt).
 
 For Codex repo-local skills, invoke the matching skill in the target repo:
 `ganpan-triage`, `ganpan-work-issue`, `ganpan-review-queue`, or
