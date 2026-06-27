@@ -104,6 +104,39 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "issues referenced non-closing (Refs, not Closes) so QA owns the close (#63)" {
+  # AC1: no auto-closing keyword in any Coder-lane merge-bound artifact.
+  for rel in \
+    plugins/orchestration/commands/work-issue.md \
+    plugins/orchestration/commands/work-issue-deep.md \
+    plugins/orchestration/references/lanes/work-issue.md \
+    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
+    plugins/orchestration/assets/CLAUDE.md \
+    CLAUDE.md ; do
+    run grep -F 'Closes #' "$REPO_ROOT/$rel"
+    [ "$status" -ne 0 ]
+  done
+  # the lane instruction files (+ canonical ref + Codex copy) use the non-closing Refs.
+  for rel in \
+    plugins/orchestration/commands/work-issue.md \
+    plugins/orchestration/commands/work-issue-deep.md \
+    plugins/orchestration/references/lanes/work-issue.md \
+    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md ; do
+    run grep -F 'Refs #' "$REPO_ROOT/$rel"
+    [ "$status" -eq 0 ]
+  done
+  # AC3: qa-check docs state the non-closing design (and drop the old inaccurate phrasing).
+  for rel in \
+    plugins/orchestration/commands/qa-check.md \
+    plugins/orchestration/references/lanes/qa-check.md \
+    plugins/ganpan-codex/skills/ganpan-qa-check/references/qa-check.md ; do
+    run grep -F 'non-closing' "$REPO_ROOT/$rel"
+    [ "$status" -eq 0 ]
+    run grep -F 'often lack it' "$REPO_ROOT/$rel"
+    [ "$status" -ne 0 ]
+  done
+}
+
 @test "claude setup command respects the shared config contract" {
   setup_cmd="$REPO_ROOT/plugins/orchestration/commands/orch-setup.md"
   run grep -q '.ganpan/orchestration.json' "$setup_cmd"
