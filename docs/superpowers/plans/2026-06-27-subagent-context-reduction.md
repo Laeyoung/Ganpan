@@ -48,12 +48,21 @@ runs in a disposable subagent; the main session only prints a one-line summary.
   it is what prevents a third level of nesting.)
 - **Otherwise** (you are the main/looped session), do exactly this and then end
   your turn:
-  1. Resolve this command file's path and the install mode (same detection
-     `run-all` uses):
+  1. Resolve this command file's path and the install mode. **Use only the
+     slash-form `${CLAUDE_PLUGIN_ROOT}/` token** (never the bare
+     `${CLAUDE_PLUGIN_ROOT}`): `install.sh` rewrites `${CLAUDE_PLUGIN_ROOT}/` →
+     `./` on copy-in, and `tests/install.bats` forbids a *bare* unsubstituted
+     token in any command except `run-all.md`. A `[ -f ]` fallback gives correct
+     behavior in both modes with no bare token, so **no `install.bats` change is
+     needed**:
      ```bash
      REPO_ROOT="$PWD"
-     if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/commands/<lane>.md" ]; then
-       CMD_FILE="${CLAUDE_PLUGIN_ROOT}/commands/<lane>.md"; PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"; MODE=plugin
+     # plugin mode: the env var is set and this slash-form path exists.
+     # copy-in: sed already rewrote the next line to CMD_FILE="./commands/<lane>.md",
+     # which does not exist (real path is .claude/commands), so the fallback fires.
+     CMD_FILE="${CLAUDE_PLUGIN_ROOT}/commands/<lane>.md"
+     if [ -f "$CMD_FILE" ]; then
+       PLUGIN_ROOT="${CMD_FILE%/commands/<lane>.md}"; MODE=plugin
      else
        CMD_FILE="$REPO_ROOT/.claude/commands/<lane>.md"; PLUGIN_ROOT=""; MODE=copyin
      fi
@@ -61,24 +70,24 @@ runs in a disposable subagent; the main session only prints a one-line summary.
      ```
   2. Spawn **one foreground subagent** (Agent tool, `run_in_background: false`)
      with a prompt built from this template (substitute the literal step-1
-     values):
+     values for `<REPO_ROOT>`, `<CMD_FILE>`, `<PLUGIN_ROOT>`):
      > "`GANPAN_EXECUTE_INLINE`. Run from the main repo root `<REPO_ROOT>`. Read
      > the file `<CMD_FILE>` with the Read tool and execute its **`## Lane
      > procedure`** section exactly, from start to finish. *(plugin mode only:)*
      > that file references scripts via `${CLAUDE_PLUGIN_ROOT}`, which is **not
      > set in your shell** — in every command you run, replace
      > `${CLAUDE_PLUGIN_ROOT}` with the literal `<PLUGIN_ROOT>`, including inside
-     > any backgrounded subshell (e.g. the heartbeat loop). For every
-     > orchestration script also export `REPO_ROOT=<REPO_ROOT>` and prefix
-     > `ORCH_CONFIG=<CFG>` where the lane file says to. Do exactly one bounded
+     > any backgrounded subshell (e.g. the heartbeat loop). The procedure resolves
+     > its own config (`resolve_config_path` / `load_config`) and passes
+     > `ORCH_CONFIG` where needed — follow it as written. Do exactly one bounded
      > lane cycle as the procedure describes, then reply with **only** a single
      > summary line: `<Lane summary format>`. Never approve or merge a PR."
      >
      > In plugin mode include the `${CLAUDE_PLUGIN_ROOT}` substitution sentence;
-     > in copy-in mode omit it (the file's paths are already `./`). `<CFG>` is the
-     > config path the procedure resolves via `resolve_config_path` — the
-     > subagent resolves it itself at procedure start, so it need not be
-     > pre-computed here.
+     > in copy-in mode omit it (the file's paths are already `./`). Do **not** put
+     > a config path in the prompt — the procedure resolves it itself (the
+     > previous draft's `ORCH_CONFIG=<CFG>` clause was removed because the
+     > subagent self-resolves config at procedure start).
   3. Print the subagent's summary line verbatim and end the turn. Do **not**
      also run the `## Lane procedure` yourself.
 
@@ -112,13 +121,16 @@ the single-cycle phrasing above. This does not change `run-all`'s own summary.
 
 ### 2. `run-all.md`
 
-In the shared preamble (step 3), add the literal `GANPAN_EXECUTE_INLINE` to the
-per-agent prompt so each spawned lane agent runs its `## Lane procedure`
-directly without re-dispatching. One sentence, e.g.: "Your prompt carries
-`GANPAN_EXECUTE_INLINE`, so when you read your lane file, follow its
-`## Lane procedure` section directly and do **not** perform the file's
-`## Dispatch (loop mode)` section." Keep `run_in_background: true` and the
-existing background fan-out behavior.
+In the **shared preamble** inside step 3 (the quoted per-agent prompt that
+begins "Run from the main repo root `<REPO_ROOT>`. Read your lane file …"), add
+the literal `GANPAN_EXECUTE_INLINE` so each spawned lane agent runs its
+`## Lane procedure` directly without re-dispatching. One sentence appended to
+that preamble, e.g.: "Your prompt carries `GANPAN_EXECUTE_INLINE`, so when you
+read your lane file, follow its `## Lane procedure` section directly and do
+**not** perform the file's `## Dispatch (loop mode)` section." Keep
+`run_in_background: true` and the existing background fan-out behavior. (Only the
+four standard lanes gain a `## Dispatch (loop mode)` section; the sentence is
+harmless for any lane file that lacks one.)
 
 ### 3. `tests/dispatch-loop-mode.bats` (new)
 
@@ -130,9 +142,10 @@ Structural regression guard (matches the existing grep-style bats tests). Assert
   - contains the heading `## Lane procedure`
   - contains the literal `GANPAN_EXECUTE_INLINE`
 - `run-all.md` contains the literal `GANPAN_EXECUTE_INLINE`.
-- Negative guard: the deep variants (`work-issue-deep.md`, `review-queue-deep.md`)
-  and `orch-setup.md` do **not** contain `## Dispatch (loop mode)` (confirms the
-  scope line wasn't accidentally crossed).
+- Negative guard: the out-of-scope commands `work-issue-deep.md`,
+  `review-queue-deep.md`, `orch-setup.md`, and `update.md` do **not** contain
+  `## Dispatch (loop mode)` (confirms the scope line wasn't accidentally
+  crossed). (There is no `triage-deep`/`qa-check-deep` variant.)
 
 Resolve the commands dir relative to `BATS_TEST_DIRNAME` like the sibling tests
 do. Use plain `grep -q -- 'literal'` / `grep -qF`.
@@ -167,7 +180,9 @@ the new `dispatch-loop-mode.bats` passes.
 - **Double-nesting under run-all** — mitigated by the `GANPAN_EXECUTE_INLINE`
   guard in both the dispatch header and run-all's prompt.
 - **Subagent can't find the command file in copy-in mode** — header resolves the
-  path explicitly per install mode.
+  path with a `[ -f ]` fallback that works in both modes using only the
+  slash-form token (so `install.sh`'s sed handles copy-in and no bare token
+  drifts into the copied files; `install.bats` needs no change).
 - **Manual one-shot invocation** (`/ganpan:work-issue` without `/loop`) — still
   works: it simply dispatches one subagent and prints the summary, which is the
   intended behavior either way.
