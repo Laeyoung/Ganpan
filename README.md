@@ -177,7 +177,7 @@ config discovery 순서:
 
 ## 컨벤션 (대상 레포에 병합됨)
 
-- **커밋:** Conventional Commits — `type(scope): subject` (`type` ∈ feat, fix, docs, refactor, test, chore, perf, build, ci). 본문은 *무엇을·왜*, 푸터는 `Closes #<n>`.
+- **커밋:** Conventional Commits — `type(scope): subject` (`type` ∈ feat, fix, docs, refactor, test, chore, perf, build, ci). 본문은 *무엇을·왜*, 푸터는 자동 종료되지 않는 참조 `Refs #<n>` (QA가 최종 종료를 담당 — 자동 종료 키워드는 머지 시 이슈를 닫아 qa-check를 건너뜀).
 - **브랜치/worktree:** 이슈 1개 → 브랜치 `issue-<n>` → worktree `../wt-issue-<n>`. 남의 `wt-issue-*`를 force-push·삭제 금지.
 - **머지 게이트:** 에이전트는 PR 승인·머지를 하지 않음. 사람이 리뷰·머지(branch protection으로 강제).
 

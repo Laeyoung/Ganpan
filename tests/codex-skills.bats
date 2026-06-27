@@ -112,7 +112,8 @@ setup() {
     plugins/orchestration/references/lanes/work-issue.md \
     plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
     plugins/orchestration/assets/CLAUDE.md \
-    CLAUDE.md ; do
+    CLAUDE.md \
+    README.md ; do
     run grep -F 'Closes #' "$REPO_ROOT/$rel"
     [ "$status" -ne 0 ]
   done
