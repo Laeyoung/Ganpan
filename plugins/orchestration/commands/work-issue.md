@@ -2,6 +2,31 @@
 description: Coder lane — claim an agent-ready issue, implement, open a PR, move to in-review.
 ---
 
+## Dispatch (loop mode)
+
+**Run this first.** This command is built to be looped (e.g. `/loop /ganpan:work-issue`). To keep the **main session's** context small across repeated ticks, the actual lane work runs in a disposable subagent; the main session only prints a one-line summary.
+
+- **If your task prompt contains the token `GANPAN_EXECUTE_INLINE`**, skip this whole section and execute the **`## Lane procedure`** below directly. This is the path taken by the subagent spawned here and by the `run-all` launcher, and it is what prevents a third level of nesting.
+- **Otherwise** (you are the main/looped session), do exactly this, then end your turn:
+  1. Resolve this command file's path and the install mode. Use **only** the slash-form `${CLAUDE_PLUGIN_ROOT}/` token (never a slashless one) so `install.sh`'s copy-in rewrite strips it and no token drifts into copied files:
+     ```bash
+     REPO_ROOT="$PWD"
+     CMD_FILE="${CLAUDE_PLUGIN_ROOT}/commands/work-issue.md"
+     if [ -f "$CMD_FILE" ]; then
+       PLUGIN_ROOT="${CMD_FILE%/commands/work-issue.md}"; MODE=plugin
+     else
+       CMD_FILE="$REPO_ROOT/.claude/commands/work-issue.md"; PLUGIN_ROOT=""; MODE=copyin
+     fi
+     echo "MODE=$MODE CMD_FILE=$CMD_FILE PLUGIN_ROOT=$PLUGIN_ROOT"
+     ```
+  2. Spawn **one foreground subagent** (Agent tool, `run_in_background: false`) whose prompt is the following, with the literal step-1 values substituted for `<REPO_ROOT>`, `<CMD_FILE>`, `<PLUGIN_ROOT>`:
+     > `GANPAN_EXECUTE_INLINE`. Run from the main repo root `<REPO_ROOT>`. Read the file `<CMD_FILE>` with the Read tool and execute its **`## Lane procedure`** section exactly, start to finish. *(plugin mode only — when `MODE=plugin`:)* that file calls scripts via the `${CLAUDE_PLUGIN_ROOT}/` prefix, which your shell does not expand — replace that prefix with `<PLUGIN_ROOT>/` in every command you run, including inside any backgrounded subshell such as the heartbeat loop. The procedure resolves its own config and passes `ORCH_CONFIG` where needed — follow it as written. Do exactly one bounded lane cycle, then reply with **only** this summary line: `Coder: <claimed #N and shipped PR #M | queue-empty | wip-exceed | claim-failed | claim-unconfirmed | api-fail>.` Never approve or merge a PR.
+  3. Print the subagent's summary line verbatim and end the turn. Do **not** run the `## Lane procedure` yourself.
+
+If the subagent dies mid-cycle, no state is corrupted — the lane is re-entrant, and any claimed issue is recovered by the existing engine path (`reclaim.sh` after the heartbeat timeout plus the Triager's reclaim sweep), exactly as when a `run-all` lane agent dies. No extra handling here.
+
+## Lane procedure
+
 You are the **Coder** lane. Run from the **main repo root**. All orchestration scripts live at `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/`.
 
 Shared lane reference: `${CLAUDE_PLUGIN_ROOT}/references/lanes/work-issue.md`. Read it as the canonical protocol before executing the Claude-specific commands below.
