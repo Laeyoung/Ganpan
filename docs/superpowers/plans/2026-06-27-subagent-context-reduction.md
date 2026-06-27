@@ -74,20 +74,30 @@ runs in a disposable subagent; the main session only prints a one-line summary.
      > "`GANPAN_EXECUTE_INLINE`. Run from the main repo root `<REPO_ROOT>`. Read
      > the file `<CMD_FILE>` with the Read tool and execute its **`## Lane
      > procedure`** section exactly, from start to finish. *(plugin mode only:)*
-     > that file references scripts via `${CLAUDE_PLUGIN_ROOT}`, which is **not
-     > set in your shell** — in every command you run, replace
-     > `${CLAUDE_PLUGIN_ROOT}` with the literal `<PLUGIN_ROOT>`, including inside
-     > any backgrounded subshell (e.g. the heartbeat loop). The procedure resolves
-     > its own config (`resolve_config_path` / `load_config`) and passes
-     > `ORCH_CONFIG` where needed — follow it as written. Do exactly one bounded
-     > lane cycle as the procedure describes, then reply with **only** a single
-     > summary line: `<Lane summary format>`. Never approve or merge a PR."
+     > that file calls scripts via the `${CLAUDE_PLUGIN_ROOT}/` prefix, which your
+     > shell does not expand — replace that prefix with `<PLUGIN_ROOT>/` in every
+     > command you run, including inside any backgrounded subshell (e.g. the
+     > heartbeat loop). The procedure resolves its own config
+     > (`resolve_config_path` / `load_config`) and passes `ORCH_CONFIG` where
+     > needed — follow it as written. Do exactly one bounded lane cycle as the
+     > procedure describes, then reply with **only** a single summary line:
+     > `<Lane summary format>`. Never approve or merge a PR."
      >
-     > In plugin mode include the `${CLAUDE_PLUGIN_ROOT}` substitution sentence;
-     > in copy-in mode omit it (the file's paths are already `./`). Do **not** put
-     > a config path in the prompt — the procedure resolves it itself (the
-     > previous draft's `ORCH_CONFIG=<CFG>` clause was removed because the
-     > subagent self-resolves config at procedure start).
+     > In plugin mode include the substitution sentence; in copy-in mode omit it
+     > (the file's paths are already `./`). Do **not** put a config path in the
+     > prompt — the procedure resolves it itself (the previous draft's
+     > `ORCH_CONFIG=<CFG>` clause was removed because the subagent self-resolves
+     > config at procedure start).
+     >
+     > **Token hygiene (critical):** every occurrence of the plugin-root token in
+     > the dispatch header — bash *and* prose — must be the **slash form**
+     > `${CLAUDE_PLUGIN_ROOT}/`. `install.sh`'s sed rewrites only that form
+     > (`s|\${CLAUDE_PLUGIN_ROOT}/|./|g`), and `tests/install.bats` greps the
+     > copied files for *any* residual `CLAUDE_PLUGIN_ROOT` (bare or not),
+     > exempting only `run-all.md`. A bare `${CLAUDE_PLUGIN_ROOT}` (no trailing
+     > slash) anywhere — including inside backticked prose — survives copy-in and
+     > fails the test. Slash-form everywhere → zero residue → no `install.bats`
+     > change.
   3. Print the subagent's summary line verbatim and end the turn. Do **not**
      also run the `## Lane procedure` yourself.
 
