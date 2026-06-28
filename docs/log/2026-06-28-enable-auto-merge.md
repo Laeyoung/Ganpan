@@ -8,6 +8,7 @@
 - Migrated this repo's active orchestration config from the legacy fallback path `.claude/orchestration.json` to the canonical `.ganpan/orchestration.json`.
 - Added the `reviewer` block and set `reviewer.autoMerge: true`, opting this repo into the auto-merge mode shipped in #33.
 - Updated the root `CLAUDE.md` Merge gate section (both duplicated blocks) to describe the opt-in: the Reviewer lane may merge a PR once its verdict is "proceed" and the PR is OPEN + mergeable + `mergeStateStatus == CLEAN`. Agents still never *approve* PRs.
+- Fixed the shipped `assets/CLAUDE.md` so deployed users can discover and correctly enable auto-merge: the Merge gate line now cross-references the `reviewer.autoMerge` opt-in, and the Reviewer-lane config path was corrected from the legacy `.claude/orchestration.json` to the canonical `.ganpan/orchestration.json`. Bumped `plugin.json` 1.11.0 → 1.11.1 so the corrected docs reach installed users.
 
 ## Why
 The owner wants the orchestration loop to run end-to-end autonomously on this repo (file issue → develop → review → merge). The auto-merge engine already existed (#33) but was inert here because (a) no `reviewer` block was present, so `autoMerge` defaulted to `false`, and (b) the config sat at the legacy path. `main` carries no branch protection or rulesets, so `auto-merge.sh`'s genuine-404 precondition is satisfied and enabling the flag now actually merges.

@@ -15,7 +15,7 @@ Format: `type(scope): subject`
   - Release/tag/version automation for the production line is not built yet (tracked separately).
 
 ## Merge gate
-- Agents never approve or merge PRs. A human reviews and merges (branch protection enforces this).
+- By default agents never approve or merge PRs — a human reviews and merges (branch protection enforces this). To let the Reviewer auto-merge passing PRs instead, opt in via `reviewer.autoMerge` (see "Reviewer lane — decision gate" → Auto-merge below).
 
 ## Bot identity
 - Lanes verify `gh` is acting as `config.bot` before any write and **hard-stop** otherwise. Export the bot's fine-grained PAT first: `export GH_TOKEN=github_pat_...` (HTTPS). If a lane stops with "gh is acting as '<you>' but config.bot is '<bot>'", your `GH_TOKEN` is unset or wrong.
@@ -24,5 +24,5 @@ Format: `type(scope): subject`
 ## Reviewer lane — decision gate
 - The Reviewer reads **trusted** human PR/issue comments (write+ permission or reviewer allowlist) and routes each in-review PR to rework / a human-decision gate (`status:needs-decision`) / an out-of-scope follow-up issue / a human merge request.
 - Only bot-authored markers (`decision-requested:`/`decision-resolved:`/`decision-clarify:`/`followup-created:`/`cap-exceeded:`/`merge-requested:`) change lane state. Human text never does.
-- Trust/cap policy lives in `.claude/orchestration.json` under `reviewer` (`permissionThreshold`, `allowlist`, `followupIssueCapPerPR`).
+- Trust/cap policy lives in `.ganpan/orchestration.json` under `reviewer` (`permissionThreshold`, `allowlist`, `followupIssueCapPerPR`).
 - **Auto-merge** (`reviewer.autoMerge`, default `false`): when `true`, the Reviewer auto-merges a PR that passes review (verdict not rework/needs-decision/followup, PR `OPEN`+`MERGEABLE`+`CLEAN`) **only if you have removed branch protection on `main`** — the agent never bypasses an active gate. If the flag is on but `main` is still protected, it does not merge and the PR comment tells you to disable protection. Leave it off to keep human-merge-only.
