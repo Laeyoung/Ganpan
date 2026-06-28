@@ -28,10 +28,20 @@ issue can no longer be claimed by any worker.
 
 The bats fixtures for these scripts use **numeric** comment ids
 (`{"id":555,"author":{"login":"botx"},…}`) shaped like `gh issue view` output
-but with a numeric id. Real `gh issue view --json comments` returns a node id,
-so the fixtures are unrealistic and the REST mutation passes in tests while
-404ing in production. The regression guard must use realistic REST-shaped
-fixtures (numeric `id`, `user.login`).
+but with a numeric id. Real `gh issue view --json comments` returns the comment's
+**GraphQL node id** as `.id` (e.g. `IC_kwDO…`) — verified empirically on this
+repo: a live `PATCH /repos/:repo/issues/comments/IC_kwDO…` returns `HTTP 404`.
+So the fixtures are unrealistic and the REST mutation passes in tests while
+404ing in production.
+
+Because the fix changes the comment **source** (from `gh issue view` to the REST
+list endpoint, which returns numeric `.id` and `.user.login`), the existing
+`heartbeat.bats` fixtures (three tests) must be **rewritten** to the REST shape
+(`{"id":<num>,"user":{"login":…},"body":…}`), not merely supplemented — under
+the new code `.author.login`/`gh issue view` fixtures would yield an empty id and
+fail. Likewise, each `claim.sh` loser-cleanup site adds one REST `gh api` GET
+(which the stub counts as a read slot), so the two claim-loss tests must each
+gain an extra `queue_response` for that read.
 
 ## Goal
 
@@ -53,39 +63,58 @@ return.
 3. **No behavior change other than the id source.** Winner selection, exit
    codes, rollback semantics, the actor gate, and the "newest bot claim is the
    live lock" rule are unchanged.
-4. **`reclaim.sh`, `followup-dedup.sh`, `unblock-check.sh` are not affected** —
-   they only *read* comment bodies / timestamps (never use a comment id against
-   a REST mutation), so they are out of scope. (Verified by grep.)
+4. **Other comment-touching scripts are not affected** — verified by grep that
+   none use a comment **id** against a REST/GraphQL *mutation*:
+   `reclaim.sh` (reads `.author.login` + bodies), `followup-dedup.sh` (counts by
+   body), `unblock-check.sh` (reads `.author.login` + `.createdAt`), and
+   `trusted-answers.sh` (already reads the REST list endpoint with `.user.login`
+   and never mutates a comment by id). So only `claim.sh` + `heartbeat.sh` are in
+   scope.
 
 ## Design (summary; mechanics in the plan)
 
 Source the comment id from the REST list endpoint, which returns the numeric
 `databaseId` as `.id`:
 
+The REST list endpoint returns comments **oldest-first**, so the comment of
+interest may be on a later page on a heavily-commented issue. Both reads use
+`gh api --paginate` so all pages are considered (the test stub returns a single
+page, so this is transparent to tests).
+
 - **`heartbeat.sh`** — replace the comment fetch `gh issue view "$issue" --json
-  comments` with `gh api "/repos/$REPO/issues/$issue/comments"` (REST list).
-  Adjust the selection jq from `.comments[] … .author.login` to `.[] …
-  .user.login` (REST shape). The existing `PATCH /repos/$REPO/issues/comments/$cid`
-  now receives a numeric id and succeeds. "Patch the newest bot claim" semantics
-  (max by body) are preserved.
+  comments` with `gh api --paginate "/repos/$REPO/issues/$issue/comments"` (REST
+  list). With `--paginate` (no `--slurp`), `gh` applies `--jq` per page and
+  concatenates the lines, so emit one `body<TAB>id` line per bot claim comment
+  and pick the **newest** (max body) in shell, preserving the existing "patch the
+  newest bot claim" semantics:
+  ```bash
+  cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" \
+         --jq '.[] | select(.user.login=="'"$BOT"'" and (.body|startswith("claim: "))) | [.body, (.id|tostring)] | @tsv' \
+        | sort | tail -n1 | cut -f2)
+  ```
+  The existing `PATCH /repos/$REPO/issues/comments/$cid` now receives a numeric
+  id and succeeds. Empty `cid` (no claim comment) keeps the existing exit-1 path.
 - **`claim.sh`** — the main `gh issue view --json labels,assignees,comments`
   fetch stays (used for labels/assignees and the body-only tie-break, none of
   which need a comment id). At each of the two loser-cleanup sites, resolve the
-  numeric id with a targeted REST read filtered by the bot login and the exact
-  claim body, then `DELETE` it:
+  numeric id with a targeted paginated REST read filtered by the bot login and
+  the exact claim body (an exact match is unique, so `head -1` suffices), then
+  `DELETE` it:
   ```bash
-  cid=$(gh api "/repos/$REPO/issues/$issue/comments" \
-        --jq 'first(.[] | select(.user.login=="'"$BOT"'" and .body==("claim: "'"$token"'")) | .id) // empty')
+  cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" \
+         --jq '.[] | select(.user.login=="'"$BOT"'" and .body==("claim: "'"$token"'")) | .id' \
+        | head -n1)
   [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
   ```
   This adds one REST read only on the (rare) lost-race / rollback path.
 
 Rejected alternative — GraphQL `updateIssueComment` / `deleteIssueComment`
-mutations using the node id already in hand: avoids the extra REST read but
-introduces a new API surface, and `gh api graphql` would need the test stub to
-treat it as a write (it currently consumes a read slot). The REST-numeric-id
-approach matches the existing code and needs no stub-classification change for
-mutations.
+mutations using the node id already in hand: avoids the extra REST read, and
+since GraphQL mutations go through `gh api graphql --method POST` they would be
+caught by the test stub's existing write-detection (no stub change needed). It
+is rejected purely for **API-surface consistency**: the codebase already mutates
+comments via `gh api --method PATCH|DELETE /repos/:repo/...`, so sourcing the
+correct numeric id for that same call is the smaller, more uniform change.
 
 ## Acceptance criteria
 
@@ -97,9 +126,13 @@ mutations.
    endpoint — verified by tests (both loser-cleanup sites: the token-tie-break
    loss and the assignee-re-add rollback).
 3. Existing exit codes / rollback behavior unchanged; the full `bats` suite and
-   `shellcheck` pass.
-4. The version sentinel is bumped (fix → patch).
-5. (Operational follow-up, outside the code change) the 4 orphaned claim
+   `shellcheck` pass. The three `heartbeat.bats` fixtures are rewritten to the
+   REST shape and the two `claim.bats` loss tests each gain the extra
+   `queue_response` for the new REST read.
+4. Both reads use `gh api --paginate` so the target comment is found even when it
+   is not on the first page of an issue's comments.
+5. The version sentinel is bumped (fix → patch).
+6. (Operational follow-up, outside the code change) the 4 orphaned claim
    comments already on #64 are cleared so it becomes claimable — noted in the
    PR; performed by a permitted actor.
 
