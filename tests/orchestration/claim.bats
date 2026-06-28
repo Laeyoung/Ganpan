@@ -70,6 +70,8 @@ setup() {
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[
     {"id":10,"author":{"login":"botx"},"body":"claim: 2026-01-01T00:00:00Z-botx-h-999"},
     {"id":11,"author":{"login":"botx"},"body":"claim: 2030-01-01T00:00:00Z-botx-h-1000"}]}'
+  # loss-path comment lookup now reads the REST list endpoint (numeric .id, .user.login):
+  queue_response '[{"id":10,"user":{"login":"botx"},"body":"claim: 2026-01-01T00:00:00Z-botx-h-999"},{"id":11,"user":{"login":"botx"},"body":"claim: 2030-01-01T00:00:00Z-botx-h-1000"}]'
   # Force our token to be the LARGER one so we lose deterministically:
   export CLAIM_TOKEN_OVERRIDE='2030-01-01T00:00:00Z-botx-h-1000'
   run bash "$SCRIPT"
@@ -148,6 +150,8 @@ setup() {
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
   export GH_FAIL_MATCH='add-assignee'   # both the initial add (line 32) and the re-add fail
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  # rollback-path comment lookup now reads the REST list endpoint (numeric .id, .user.login):
+  queue_response '[{"id":1,"user":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]'
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   grep -q 'api --method DELETE /repos/o/r/issues/comments/1' "$GH_CALLS"                       # deleted OUR claim comment
