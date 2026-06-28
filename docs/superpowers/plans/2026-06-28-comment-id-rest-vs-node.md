@@ -18,17 +18,23 @@ Replace the comment fetch + id selection (lines ~12–18):
 
 - Remove `view=$(gh issue view "$issue" --json comments --repo "$REPO") || …`
   and the `cid=$(echo "$view" | jq … .comments[] … max_by(.body).id …)`.
-- New: source the **numeric** id from the paginated REST list, newest claim
-  chosen in shell:
+- New: fetch the comments with explicit failure handling (no swallowed error),
+  then source the **numeric** id of the newest claim, using the codebase's
+  established `--paginate | jq -s 'add // []'` page-merge pattern (see
+  `trusted-answers.sh`):
   ```bash
-  cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" \
-         --jq '.[] | select(.user.login=="'"$BOT"'" and (.body|startswith("claim: "))) | [.body, (.id|tostring)] | @tsv' \
-         2>/dev/null | sort | tail -n1 | cut -f2)
+  comments=$(gh api --paginate "/repos/$REPO/issues/$issue/comments") \
+    || { log ERROR "comment list failed on #$issue"; exit 1; }
+  cid=$(printf '%s\n' "$comments" | jq -s -r 'add // [] | .[]
+          | select(.user.login=="'"$BOT"'" and (.body|startswith("claim: ")))
+          | [.body, (.id|tostring)] | @tsv' | sort | tail -n1 | cut -f2)
   [ -z "$cid" ] && { log ERROR "no claim comment on #$issue"; exit 1; }
   ```
-  Note: `gh api --jq` does **not** support jq `--arg`; embed `$BOT`/`$token` via
-  shell single-quote interpolation as shown. REST comment objects use
-  `.user.login`, **not** `.author.login` (heartbeat currently uses `.author`).
+  Notes: `gh api --jq` does **not** support jq `--arg`; embed `$BOT` via shell
+  single-quote interpolation. REST comment objects use `.user.login` (not
+  `.author.login`). Separating the fetch from the `jq` keeps `set -euo pipefail`
+  from silently aborting on an API error, and `jq -s 'add // []'` merges the
+  multiple JSON arrays `--paginate` emits (and works for the single-page stub).
 - Keep the existing `token=…` line and the `gh api --method PATCH
   /repos/$REPO/issues/comments/$cid -f body="claim: $token"` line unchanged —
   it now gets a numeric id.
@@ -44,11 +50,17 @@ assignee-re-add rollback ~107–108), replace:
 cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
 [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
 ```
-with a numeric-id lookup via the paginated REST list:
+with a numeric-id lookup via the paginated REST list (exact match is unique, so
+`head -1` suffices). The exact body match uses a **single** jq string literal
+`"claim: <token>"` — no `+` concatenation, since adjacent jq string literals are
+a parse error. Cleanup is best-effort, so guard the assignment with `|| cid=""`
+so a transient API/jq error can't abort the loss path before the assignee-release
+and `exit 2`:
 ```bash
-cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" \
-       --jq '.[] | select(.user.login=="'"$BOT"'" and .body==("claim: "'"$token"'")) | .id' \
-       2>/dev/null | head -n1)
+cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" 2>/dev/null \
+       | jq -s -r 'add // [] | .[]
+           | select(.user.login=="'"$BOT"'" and .body=="claim: '"$token"'") | .id' \
+       | head -n1) || cid=""
 [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
 ```
 The body-only winner/tie-break logic (using `$view`) is unchanged. No other lines
