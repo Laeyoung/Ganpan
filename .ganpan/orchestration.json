@@ -16,5 +16,11 @@
   "project": {
     "number": null,
     "statusField": "Status"
+  },
+  "reviewer": {
+    "permissionThreshold": "write",
+    "allowlist": [],
+    "followupIssueCapPerPR": 3,
+    "autoMerge": true
   }
 }

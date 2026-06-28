@@ -39,7 +39,8 @@ Format: `type(scope): subject`
 - Never force-push or delete another worker's `wt-issue-*` branch.
 
 ## Merge gate
-- Agents never approve or merge PRs. A human reviews and merges (branch protection enforces this).
+- This repo opts **into** reviewer auto-merge: `.ganpan/orchestration.json` sets `reviewer.autoMerge: true`, and `main` has no branch protection or rulesets, so the Reviewer lane may merge a PR once its verdict is "proceed" and the PR is OPEN + mergeable + `mergeStateStatus == CLEAN`. Agents still never *approve* PRs, and `auto-merge.sh` fails closed on any inconclusive protection probe.
+- Re-enabling the human merge gate means either flipping `reviewer.autoMerge` back to `false` or adding branch protection on `main` (`auto-merge.sh` will then return `protected` and request a human merge).
 
 ## Versioning (SemVer — bump `plugins/orchestration/.claude-plugin/plugin.json`)
 - **fix** → patch (`x.y.Z`); **feat** → minor (`x.Y.0`); breaking change → major (`X.0.0`).
@@ -64,7 +65,8 @@ Format: `type(scope): subject`
 - Never force-push or delete another worker's `wt-issue-*` branch.
 
 ## Merge gate
-- Agents never approve or merge PRs. A human reviews and merges (branch protection enforces this).
+- This repo opts **into** reviewer auto-merge: `.ganpan/orchestration.json` sets `reviewer.autoMerge: true`, and `main` has no branch protection or rulesets, so the Reviewer lane may merge a PR once its verdict is "proceed" and the PR is OPEN + mergeable + `mergeStateStatus == CLEAN`. Agents still never *approve* PRs, and `auto-merge.sh` fails closed on any inconclusive protection probe.
+- Re-enabling the human merge gate means either flipping `reviewer.autoMerge` back to `false` or adding branch protection on `main` (`auto-merge.sh` will then return `protected` and request a human merge).
 
 ## Bot identity
 - Lanes verify `gh` is acting as `config.bot` before any write and **hard-stop** otherwise. Export the bot's fine-grained PAT first: `export GH_TOKEN=github_pat_...` (HTTPS). If a lane stops with "gh is acting as '<you>' but config.bot is '<bot>'", your `GH_TOKEN` is unset or wrong.

@@ -69,5 +69,12 @@ if [ -n "${GH_EMIT_WRITE_URL:-}" ]; then
     "issue edit"|"issue comment"|"issue create"|"pr create"|"pr merge")
       echo "https://github.com/o/r/issues/STUB-URL" ;;
   esac
+  # `gh api --method PATCH|DELETE …` (e.g. heartbeat's claim refresh, claim.sh's
+  # loser-comment cleanup) also prints a body/URL on success — guard the same way
+  # so a captured+mutating script that forgets to redirect it is caught. (Read
+  # `gh api` GET already returned above, so this only matches writes.)
+  if [ "${1:-}" = "api" ] && printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](POST|PUT|PATCH|DELETE)'; then
+    echo "https://github.com/o/r/issues/STUB-URL"
+  fi
 fi
 exit "${GH_EXIT:-0}"
