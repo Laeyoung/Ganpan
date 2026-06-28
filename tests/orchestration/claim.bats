@@ -74,10 +74,12 @@ setup() {
   queue_response '[{"id":10,"user":{"login":"botx"},"body":"claim: 2026-01-01T00:00:00Z-botx-h-999"},{"id":11,"user":{"login":"botx"},"body":"claim: 2030-01-01T00:00:00Z-botx-h-1000"}]'
   # Force our token to be the LARGER one so we lose deterministically:
   export CLAIM_TOKEN_OVERRIDE='2030-01-01T00:00:00Z-botx-h-1000'
+  export GH_EMIT_WRITE_URL=1   # make every mutating write (incl. the new api DELETE) print a URL
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   grep -q 'api --method DELETE /repos/o/r/issues/comments/11' "$GH_CALLS"  # deleted OUR comment (id 11), not the winner's
   grep -q 'issue edit 7 --remove-assignee botx' "$GH_CALLS"                # released the assignee on loss
+  [[ "$output" != *"STUB-URL"* ]]   # the new api DELETE (and other writes) stay off captured stdout
 }
 
 @test "claim comment write fails → label rolled back to agent-ready, exit 2 (not stuck)" {
