@@ -20,6 +20,14 @@ write_config() {
   printf '{"repo":"o/r","bot":"botx","candidateN":3,"wipLimit":5,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3,"autoMerge":%s}}' "$1" > "$ORCH_CONFIG"
 }
 
+# write a config with autoMerge:true and reviewer.autoMergePrivatePlanWorkaround set to $1
+write_config_workaround() {
+  printf '{"repo":"o/r","bot":"botx","candidateN":3,"wipLimit":5,"reclaim":{"timeoutMinutes":120,"heartbeatMinutes":15},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"},"reviewer":{"permissionThreshold":"write","allowlist":[],"followupIssueCapPerPR":3,"autoMerge":true,"autoMergePrivatePlanWorkaround":%s}}' "$1" > "$ORCH_CONFIG"
+}
+
+# GitHub's exact Free-plan private-repo protection-API 403 body (the string auto-merge.sh keys on)
+PRIVATE_PLAN_403='gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)'
+
 @test "autoMerge off → 'disabled', never merges" {
   write_config false
   run bash "$SCRIPT" 7
@@ -125,4 +133,57 @@ write_config() {
   [ "$status" -eq 0 ]
   [ "$output" = "merged" ]               # exactly the token — no leaked URL line (subsumes a STUB-URL check)
   grep -q 'pr merge 7' "$GH_CALLS"       # the merge actually ran (so the assertion isn't vacuous)
+}
+
+# --- issue #72: Free-plan private-repo protection-API 403 workaround (opt-in) ---
+
+@test "autoMerge on, workaround OFF (default), Free-plan private 403 → fails closed 'protect-check-failed', never merges" {
+  # Regression guard: the private-plan 403 is inconclusive like any other non-404 and MUST
+  # stay fail-closed unless the operator explicitly opts in. Default behavior unchanged.
+  write_config true   # autoMergePrivatePlanWorkaround absent ⇒ defaults false
+  queue_response '{"state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"main"}'
+  export GH_API_ERR_MATCH='branches/main/protection'
+  export GH_API_ERR_BODY="$PRIVATE_PLAN_403"
+  run --separate-stderr bash "$SCRIPT" 7
+  [ "$status" -eq 2 ]
+  [ "$output" = "protect-check-failed" ]
+  [[ "$stderr" == *"inconclusive"* ]]
+  ! grep -q 'pr merge' "$GH_CALLS"
+}
+
+@test "autoMerge on, workaround ON, Free-plan private 403, PR clean → treats base as unprotected and merges" {
+  write_config_workaround true
+  queue_response '{"state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"main"}'
+  export GH_API_ERR_MATCH='branches/main/protection'
+  export GH_API_ERR_BODY="$PRIVATE_PLAN_403"
+  run --separate-stderr bash "$SCRIPT" 7
+  [ "$status" -eq 0 ]
+  [ "$output" = "merged" ]
+  [[ "$stderr" == *"autoMergePrivatePlanWorkaround=true"* ]]   # the bypass is logged, not silent
+  grep -q 'pr merge 7' "$GH_CALLS"
+}
+
+@test "autoMerge on, workaround ON, but a DIFFERENT non-404 error (5xx/other 403) → still fails closed, never merges" {
+  # The workaround keys on the EXACT Free-plan message only. Any other inconclusive body
+  # (here a 500) must remain fail-closed even with the flag on — real gates never bypassed.
+  write_config_workaround true
+  queue_response '{"state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"main"}'
+  export GH_API_ERR_MATCH='branches/main/protection'
+  export GH_API_ERR_BODY='gh: Server Error (HTTP 500)'
+  run --separate-stderr bash "$SCRIPT" 7
+  [ "$status" -eq 2 ]
+  [ "$output" = "protect-check-failed" ]
+  ! grep -q 'pr merge' "$GH_CALLS"
+}
+
+@test "autoMerge on, workaround ON, but base IS protected (200) → 'protected', never merges" {
+  # Even with the flag on, a repo that supports protection returns 200 and is honored:
+  # the workaround only affects the error branch, so a real gate is never bypassed.
+  write_config_workaround true
+  queue_response '{"state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","baseRefName":"main"}'
+  queue_response '{"required_status_checks":{}}'   # 200 ⇒ protected
+  run bash "$SCRIPT" 7
+  [ "$status" -eq 0 ]
+  [ "$output" = "protected" ]
+  ! grep -q 'pr merge' "$GH_CALLS"
 }
