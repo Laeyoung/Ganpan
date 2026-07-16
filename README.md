@@ -21,12 +21,17 @@ status:qa          ── /qa-check ──▶ status:done   (실패 시 rework /
 |------|-------------|-------------|------|
 | **Triager** | `/ganpan:triage` | `ganpan-triage` | 고아 락 회수(reclaim) 후 `status:triage` 이슈를 분류 → `agent-ready` 또는 `blocked` |
 | **Coder** | `/ganpan:work-issue` | `ganpan-work-issue` | `agent-ready` 이슈를 클레임 → worktree에서 구현 → PR 생성 → `in-review` |
+| **Coder (deep)** | `/ganpan:work-issue-deep` | — | 더 크거나 위험한 이슈용. 같은 클레임/락 계약이되, 단일 "구현" 단계를 **Spec → 리뷰 → Plan → 리뷰 → 구현 → 리뷰** 루프로 대체 (Claude Code 전용) |
 | **Reviewer** | `/ganpan:review-queue` | `ganpan-review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
+| **Reviewer (deep)** | `/ganpan:review-queue-deep` | — | 각 `in-review` PR을 **멀티패스 에이전트팀**으로 리뷰한 뒤 표준 4-way 프로토콜로 라우팅 (Claude Code 전용) |
 | **QA** | `/ganpan:qa-check` | `ganpan-qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
 | **Setup** | `/ganpan:orch-setup` | `ganpan-setup` | 1회 셋업 (아래 참고) |
+| **Update** | `/ganpan:update` | `ganpan-update` | 설치된 버전 vs 최신 버전과 업데이트 절차를 **안내만** 함 (자문용 — 레포를 절대 바꾸지 않음) |
 | **통합 런처** | `/ganpan:run-all` | — | 4개 레인(Triager·Coder·Reviewer·QA)을 백그라운드 에이전트로 한 번에 병렬 1회 스윕 (Claude Code 전용) |
 
 > 플러그인 커맨드는 플러그인 이름으로 네임스페이싱됩니다. 정식 호출은 `/ganpan:triage`이며, 충돌이 없으면 짧은 `/triage`로도 호출됩니다.
+>
+> **`-deep` 변형**은 표준 레인과 동일한 클레임/락/전이 계약을 따르되 더 무거운 워크플로를 실행합니다. 평상시 백로그는 표준 레인으로 돌리고, 크거나 위험한 이슈만 deep으로 돌리세요. deep Coder는 Superpowers 플러그인과 `/document-review-loop`·`/dev-review-loop` 스킬을 필요로 하며, 없으면 표준 `/ganpan:work-issue`로 폴백합니다.
 
 ---
 
@@ -147,6 +152,29 @@ QA      :  /goal 로 /ganpan:qa-check 래핑
 3. `/ganpan:work-issue` 1회 → `status:in-progress` → PR과 함께 `status:in-review`.
 4. 사람이 PR 승인·머지 → `/ganpan:review-queue` → `status:qa`.
 5. `/ganpan:qa-check` → `status:done` (실패 시 rework/blocked).
+
+---
+
+## 무인 운영 (auto mode)
+
+레인은 `/loop`으로 **사람 개입 없이** 도는 것을 전제로 설계되어 있습니다. 그러려면 Claude Code가 레인이 실행하는 봇 쓰기(`gh`, `git`, `scripts/orchestration/*.sh`)마다 승인 프롬프트를 띄우지 않아야 합니다.
+
+1. **권한 허용 목록(권장).** `.claude/settings.json`의 `permissions.allow`에 레인이 쓰는 명령을 등록해 매번 묻지 않게 합니다. 예:
+   ```jsonc
+   {
+     "permissions": {
+       "allow": [
+         "Bash(gh issue:*)", "Bash(gh pr:*)", "Bash(gh api:*)",
+         "Bash(git:*)", "Bash(./scripts/orchestration/:*)"
+       ]
+     }
+   }
+   ```
+   허용 범위는 필요에 맞게 좁히세요. 특히 `gh api --method DELETE`처럼 **외부 시스템을 바꾸는** 호출은 안전 분류기가 기본적으로 더 강하게 게이팅하므로, 정말 필요할 때만 명시적으로 허용 규칙(`Bash(gh api --method DELETE:*)` 등)을 추가하세요.
+2. **편집 자동 수락.** 무인 루프에서는 편집 승인 모드(예: `acceptEdits`)를 켜 코드·문서 편집이 멈추지 않게 합니다.
+3. **안전장치는 그대로.** auto mode여도 **에이전트는 PR을 머지·승인하지 않습니다**(branch protection으로 강제). 또 각 레인은 시작 시 `gh` 행위 주체가 `config.bot`인지 확인하고 아니면 즉시 중단하므로, `GH_TOKEN`(봇 PAT)을 먼저 export 해야 합니다(위 "셋업 이후 사람이 해야 할 일" 참고).
+
+> `/loop`으로 표준 레인을 돌리면, 각 틱의 실제 작업은 **일회용 서브에이전트**에서 실행되고 메인 세션에는 한 줄 요약만 남습니다 — 반복 틱마다 컨텍스트가 무한히 쌓이는 것을 막기 위한 설계입니다(#66).
 
 ---
 

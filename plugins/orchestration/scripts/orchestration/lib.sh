@@ -45,6 +45,10 @@ load_config() {
   REVIEWER_ALLOWLIST=$(jq -r '.reviewer.allowlist[]? // empty' "$cfg")
   FOLLOWUP_CAP=$(jq -r '.reviewer.followupIssueCapPerPR // 3' "$cfg")
   REVIEWER_AUTO_MERGE=$(jq -r '.reviewer.autoMerge // false' "$cfg")
+  # Opt-in escape hatch for Free-plan PRIVATE repos where the branch-protection API
+  # always 403s ("Upgrade to GitHub Pro…") so a genuine 404 is unreachable (issue #72).
+  # Default false ⇒ auto-merge keeps failing CLOSED on that 403 for every other repo.
+  REVIEWER_AUTO_MERGE_PRIVATE_PLAN_WORKAROUND=$(jq -r '.reviewer.autoMergePrivatePlanWorkaround // false' "$cfg")
   # Optional branch strategy. Absent block ⇒ "main" (backward compatible: feature PRs
   # target main, the legacy single-branch behavior). branchStrategy.integrationBranch
   # is the branch Coder-lane feature PRs integrate into (e.g. "develop" for git-flow).
@@ -52,7 +56,7 @@ load_config() {
   # $RANDOM tail guarantees distinct tokens even when hostname+pid collide across
   # containers (e.g. pid 1 in identical images), preventing a tie-break double-claim.
   WORKER_ID="${BOT}-$(hostname -s 2>/dev/null || echo host)-$$-${RANDOM}"
-  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP REVIEWER_AUTO_MERGE INTEGRATION_BRANCH
+  export ORCH_CONFIG_PATH REPO BOT CANDIDATE_N WIP_LIMIT RECLAIM_TIMEOUT_MIN HEARTBEAT_MIN WORKTREE_BASE PROJECT_NUMBER PROJECT_STATUS_FIELD WORKER_ID REVIEWER_PERM_THRESHOLD REVIEWER_ALLOWLIST FOLLOWUP_CAP REVIEWER_AUTO_MERGE REVIEWER_AUTO_MERGE_PRIVATE_PLAN_WORKAROUND INTEGRATION_BRANCH
 }
 
 # require_bot_actor — assert the gh actor matches config.bot before any write.

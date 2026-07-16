@@ -11,7 +11,8 @@ setup() {
 
 @test "edits the existing claim comment by id (PATCH), not --edit-last" {
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
-  queue_response '{"comments":[{"id":555,"author":{"login":"botx"},"body":"claim: old-token"},{"id":556,"author":{"login":"botx"},"body":"PR: https://x"}]}'
+  # REST list shape: top-level array, author under .user.login, numeric .id.
+  queue_response '[{"id":555,"user":{"login":"botx"},"body":"claim: old-token"},{"id":556,"user":{"login":"botx"},"body":"PR: https://x"}]'
   run bash "$SCRIPT" 42
   [ "$status" -eq 0 ]
   # the refreshed body must actually be written (not just the comment URL hit)
@@ -20,7 +21,7 @@ setup() {
 }
 
 @test "no claim comment → exit 1" {
-  queue_response '{"comments":[{"id":1,"author":{"login":"botx"},"body":"PR: x"}]}'
+  queue_response '[{"id":1,"user":{"login":"botx"},"body":"PR: x"}]'
   run bash "$SCRIPT" 42
   [ "$status" -eq 1 ]
 }
@@ -28,7 +29,7 @@ setup() {
 @test "with multiple bot claim comments, patches the NEWEST (matches reclaim's max)" {
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
   # id 100 = stale (old token, left by an earlier reclaim cycle); id 200 = live (newer token).
-  queue_response '{"comments":[{"id":100,"author":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-9"},{"id":200,"author":{"login":"botx"},"body":"claim: 2025-01-01T00:00:00Z-botx-h-2"}]}'
+  queue_response '[{"id":100,"user":{"login":"botx"},"body":"claim: 2000-01-01T00:00:00Z-botx-h-9"},{"id":200,"user":{"login":"botx"},"body":"claim: 2025-01-01T00:00:00Z-botx-h-2"}]'
   run bash "$SCRIPT" 42
   [ "$status" -eq 0 ]
   grep -q 'api --method PATCH /repos/o/r/issues/comments/200' "$GH_CALLS"   # newest
@@ -38,7 +39,7 @@ setup() {
 @test "actor mismatch → aborts before PATCH" {
   export GH_STUB_LOGIN=intruder
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
-  queue_response '{"comments":[{"id":555,"author":{"login":"botx"},"body":"claim: old-token"}]}'  # would be PATCHed without the gate
+  queue_response '[{"id":555,"user":{"login":"botx"},"body":"claim: old-token"}]'  # would be PATCHed without the gate
   run bash "$SCRIPT" 42
   [ "$status" -ne 0 ]
   [[ "$output" == *"acting as 'intruder'"* ]]   # confirms the identity gate is what aborted

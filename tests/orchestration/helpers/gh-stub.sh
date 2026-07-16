@@ -12,6 +12,15 @@ echo "$*" >> "$GH_CALLS"
 if [ -n "${GH_FAIL_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_FAIL_MATCH"; then
   exit 1
 fi
+# GH_API_ERR_MATCH (extended regex): simulate a specific non-404 error BODY on a matching
+# call — print $GH_API_ERR_BODY (default a Free-plan private-repo 403) to stderr and exit 1,
+# WITHOUT consuming a queued read slot. Lets callers exercise body-string-dependent branches
+# (e.g. auto-merge.sh's private-plan workaround) apart from a generic GH_FAIL_MATCH failure.
+# Checked before the read-emitting clauses so it never reads a slot.
+if [ -n "${GH_API_ERR_MATCH:-}" ] && printf '%s' "$*" | grep -qE "$GH_API_ERR_MATCH"; then
+  echo "${GH_API_ERR_BODY:-gh: Upgrade to GitHub Pro or make this repository public to enable this feature. (HTTP 403)}" >&2
+  exit 1
+fi
 # GH_API_404_MATCH (extended regex): simulate a *genuine* HTTP 404 on a matching call —
 # print gh's "(HTTP 404)" message to stderr and exit 1, WITHOUT consuming a queued read
 # slot. Distinct from GH_FAIL_MATCH (a generic non-zero exit with NO message): callers that
@@ -69,5 +78,12 @@ if [ -n "${GH_EMIT_WRITE_URL:-}" ]; then
     "issue edit"|"issue comment"|"issue create"|"pr create"|"pr merge")
       echo "https://github.com/o/r/issues/STUB-URL" ;;
   esac
+  # `gh api --method PATCH|DELETE …` (e.g. heartbeat's claim refresh, claim.sh's
+  # loser-comment cleanup) also prints a body/URL on success — guard the same way
+  # so a captured+mutating script that forgets to redirect it is caught. (Read
+  # `gh api` GET already returned above, so this only matches writes.)
+  if [ "${1:-}" = "api" ] && printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](POST|PUT|PATCH|DELETE)'; then
+    echo "https://github.com/o/r/issues/STUB-URL"
+  fi
 fi
 exit "${GH_EXIT:-0}"

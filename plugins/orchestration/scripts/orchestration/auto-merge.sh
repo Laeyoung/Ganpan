@@ -6,6 +6,17 @@
 #   2. the PR's base branch is NOT protected — confirmed by a genuine 404 from the
 #      protection API (any inconclusive probe fails CLOSED; the agent never bypasses
 #      an active gate or guesses past a transient API failure), and
+#      — EXCEPTION (opt-in, issue #72): on a PRIVATE repo under a GitHub plan without
+#        branch protection (Free), `repos/:repo/branches/:base/protection` ALWAYS
+#        returns a 403 ("Upgrade to GitHub Pro or make this repository public…")
+#        regardless of protection state, so a genuine 404 is unreachable and autoMerge
+#        would be permanently stuck at protect-check-failed. When (and ONLY when) the
+#        operator sets reviewer.autoMergePrivatePlanWorkaround: true, that EXACT 403
+#        message is treated as "unprotected" — safe because the feature being
+#        unavailable means the branch cannot be protected. Every OTHER inconclusive
+#        response (5xx, missing scope, rate-limit, any other 403) still fails CLOSED,
+#        and a repo that actually supports protection never emits this message, so real
+#        protection is never bypassed. Default off ⇒ no change for any other repo.
 #   3. the PR is OPEN, mergeable, and mergeStateStatus == CLEAN
 #      (conservative: any failing/pending check, conflict, or behind-base blocks).
 #
@@ -58,7 +69,16 @@ BASE="${AUTO_MERGE_BASE:-$(printf '%s' "$view" | jq -r '.baseRefName')}"
 if prot=$(gh api "repos/$REPO/branches/$BASE/protection" 2>&1); then
   echo "protected"; exit 0
 fi
-if ! printf '%s\n' "$prot" | grep -qiE 'branch not protected|HTTP 404'; then
+if printf '%s\n' "$prot" | grep -qiE 'branch not protected|HTTP 404'; then
+  : # genuine 404 → the human removed the gate; fall through to the readiness check.
+elif [ "${REVIEWER_AUTO_MERGE_PRIVATE_PLAN_WORKAROUND:-false}" = "true" ] \
+     && printf '%s\n' "$prot" | grep -qiF 'Upgrade to GitHub Pro or make this repository public'; then
+  # Opt-in only (see header EXCEPTION): a Free-plan PRIVATE repo returns this EXACT 403
+  # whether or not protection exists — but the feature being unavailable means the base
+  # CANNOT be protected, so with the operator's explicit opt-in we treat it as unprotected.
+  # A repo that supports protection never emits this string, so real gates stay unbypassed.
+  log WARN "branch-protection API unavailable on '$BASE' (Free-plan private repo); autoMergePrivatePlanWorkaround=true → treating base as unprotected"
+else
   log ERROR "branch-protection probe inconclusive for '$BASE' (not a 404): $prot"
   echo "protect-check-failed"; exit 2
 fi

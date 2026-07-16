@@ -83,7 +83,17 @@ if [ "$ntok" -ge 2 ]; then
   winner=$(echo "$view" | jq -r --arg b "$BOT" '[.comments[] | select(.author.login==$b and (.body|startswith("claim: "))) | (.body|sub("^claim: ";""))] | unique | sort | .[0]')
   if [ "$winner" != "$token" ]; then
     # we lost: delete our own claim comment, release assignee, return 2
-    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
+    # Source the NUMERIC comment id from the REST list endpoint. `$view` (from
+    # `gh issue view --json comments`) carries the GraphQL node id (IC_…), which
+    # the REST DELETE endpoint rejects with HTTP 404 — so the loser's claim
+    # comment would never be removed and stale claims would accumulate, poisoning
+    # the issue (#68). REST keys the author under `.user.login`; `--paginate` +
+    # `jq -s 'add // []'` handles a comment not on page 1; a single jq string
+    # literal avoids the adjacent-literal parse error; `|| cid=""` keeps a
+    # transient API/jq error from aborting the loss path before exit 2.
+    cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" 2>/dev/null \
+           | jq -s -r 'add // [] | .[] | select(.user.login=="'"$BOT"'" and .body=="claim: '"$token"'") | .id' \
+           | head -n1) || cid=""
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
     gh issue edit "$issue" --remove-assignee "$BOT" --repo "$REPO" >/dev/null || true
     log INFO "lost claim race on #$issue (winner=$winner)"
@@ -104,7 +114,17 @@ fi
 if ! echo "$view" | jq -e --arg b "$BOT" '.assignees[]? | select(.login==$b)' >/dev/null; then
   if ! gh issue edit "$issue" --add-assignee "$BOT" --repo "$REPO" >/dev/null; then
     log ERROR "bot not an assignee on #$issue and re-add failed, rolling back to agent-ready"
-    cid=$(echo "$view" | jq -r --arg b "$BOT" --arg t "$token" 'first(.comments[] | select(.author.login==$b and .body==("claim: "+$t)) | .id) // empty')
+    # Source the NUMERIC comment id from the REST list endpoint. `$view` (from
+    # `gh issue view --json comments`) carries the GraphQL node id (IC_…), which
+    # the REST DELETE endpoint rejects with HTTP 404 — so the loser's claim
+    # comment would never be removed and stale claims would accumulate, poisoning
+    # the issue (#68). REST keys the author under `.user.login`; `--paginate` +
+    # `jq -s 'add // []'` handles a comment not on page 1; a single jq string
+    # literal avoids the adjacent-literal parse error; `|| cid=""` keeps a
+    # transient API/jq error from aborting the loss path before exit 2.
+    cid=$(gh api --paginate "/repos/$REPO/issues/$issue/comments" 2>/dev/null \
+           | jq -s -r 'add // [] | .[] | select(.user.login=="'"$BOT"'" and .body=="claim: '"$token"'") | .id' \
+           | head -n1) || cid=""
     [ -n "$cid" ] && gh api --method DELETE "/repos/$REPO/issues/comments/$cid" >/dev/null 2>&1 || true
     gh issue edit "$issue" --add-label status:agent-ready --remove-label status:in-progress --repo "$REPO" >/dev/null || true
     exit 2

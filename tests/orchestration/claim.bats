@@ -70,12 +70,16 @@ setup() {
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[{"login":"botx"}],"comments":[
     {"id":10,"author":{"login":"botx"},"body":"claim: 2026-01-01T00:00:00Z-botx-h-999"},
     {"id":11,"author":{"login":"botx"},"body":"claim: 2030-01-01T00:00:00Z-botx-h-1000"}]}'
+  # loss-path comment lookup now reads the REST list endpoint (numeric .id, .user.login):
+  queue_response '[{"id":10,"user":{"login":"botx"},"body":"claim: 2026-01-01T00:00:00Z-botx-h-999"},{"id":11,"user":{"login":"botx"},"body":"claim: 2030-01-01T00:00:00Z-botx-h-1000"}]'
   # Force our token to be the LARGER one so we lose deterministically:
   export CLAIM_TOKEN_OVERRIDE='2030-01-01T00:00:00Z-botx-h-1000'
+  export GH_EMIT_WRITE_URL=1   # make every mutating write (incl. the new api DELETE) print a URL
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   grep -q 'api --method DELETE /repos/o/r/issues/comments/11' "$GH_CALLS"  # deleted OUR comment (id 11), not the winner's
   grep -q 'issue edit 7 --remove-assignee botx' "$GH_CALLS"                # released the assignee on loss
+  [[ "$output" != *"STUB-URL"* ]]   # the new api DELETE (and other writes) stay off captured stdout
 }
 
 @test "claim comment write fails → label rolled back to agent-ready, exit 2 (not stuck)" {
@@ -148,6 +152,8 @@ setup() {
   export CLAIM_TOKEN_OVERRIDE='2026-02-01T00:00:00Z-botx-h-1'
   export GH_FAIL_MATCH='add-assignee'   # both the initial add (line 32) and the re-add fail
   queue_response '{"labels":[{"name":"status:in-progress"}],"assignees":[],"comments":[{"id":1,"author":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]}'
+  # rollback-path comment lookup now reads the REST list endpoint (numeric .id, .user.login):
+  queue_response '[{"id":1,"user":{"login":"botx"},"body":"claim: 2026-02-01T00:00:00Z-botx-h-1"}]'
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   grep -q 'api --method DELETE /repos/o/r/issues/comments/1' "$GH_CALLS"                       # deleted OUR claim comment
