@@ -4,7 +4,7 @@
 Format: `type(scope): subject`
 - `type` ∈ feat, fix, docs, refactor, test, chore, perf, build, ci.
 - Body explains **what changed and why** (not "수정했습니다").
-- Footer references the issue: `Closes #<n>`.
+- Footer references the issue with a non-closing reference: `Refs #<n>` (QA owns the terminal close — an auto-closing keyword would close the issue on merge and skip qa-check).
 
 ## Branches / worktrees
 - One issue → branch `issue-<n>` → worktree `../wt-issue-<n>`.
