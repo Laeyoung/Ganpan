@@ -94,7 +94,7 @@ setup() {
   [[ "$output" == *"claude, codex, antigravity, both, all"* ]]
 }
 
-@test "--target both stdout carries no antigravity additions (regression guard)" {
+@test "--target both stdout has no antigravity leakage (narrow guard — full byte-identity is covered by tests/install.bats plus code review, not this test)" {
   run bash "$REPO_ROOT/install.sh" "$TARGET" --target both
   [ "$status" -eq 0 ]
   [[ "$output" != *"agy"* ]]
@@ -175,14 +175,14 @@ Refs #74"
 ### Task 2: Generalize Codex-only phrasing in shipped skill/lane text
 
 **Files:**
-- Modify: `plugins/ganpan-codex/skills/ganpan-setup/SKILL.md:11`
+- Modify: `plugins/ganpan-codex/skills/ganpan-setup/SKILL.md:12`
 - Modify: `plugins/orchestration/references/lanes/setup.md:12`
 - Modify: `plugins/ganpan-codex/skills/ganpan-setup/references/setup.md:12` (must stay identical to the lane copy — `tests/codex-skills.bats` "codex lane references match the shared source" enforces it)
 - Test: existing `tests/codex-skills.bats` (no new test; the match-the-shared-source test is the guard)
 
 - [ ] **Step 1: Edit the three lines**
 
-`ganpan-setup/SKILL.md` line 11:
+`ganpan-setup/SKILL.md` line 12:
 ```markdown
 3. Prefer `.ganpan/orchestration.json` for new installs. Legacy `.claude/orchestration.json` remains a fallback.
 ```
