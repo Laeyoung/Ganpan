@@ -28,9 +28,15 @@ site is JS-rendered and not fetchable headlessly):
    `name:` and `description:`. This is **byte-compatible with what ganpan's
    Codex target already ships** — same path, same layout, same frontmatter.
    (Source: codelabs.developers.google.com/antigravity/how-to-create-agent-skills-for-antigravity-cli)
-2. **Invocation.** Skills are auto-activated by intent match on the
-   frontmatter `description` (no slash command required); `/skills` inside the
-   `agy` TUI lists what was discovered.
+2. **Invocation — mechanism contested between sources.** The codelab shows
+   natural-language intent activation against the frontmatter `description`
+   (with a permission prompt); the dev.to hands-on guide instead describes
+   filename→slash-command mapping ("`.agents/skills/lint.md` becomes
+   `/lint`"). We do not pick a winner: user-facing wording (SETUP.md, the
+   next-steps hint) must mention **both** invocation styles ("ask for the
+   lane by name, or try `/<skill-name>`"), and the AC9 smoke test resolves
+   which one (or both) is real. `/skills` inside the `agy` TUI lists what was
+   discovered — both sources agree on that.
 3. **AGENTS.md.** `agy` reads a root `AGENTS.md` and prepends it to every
    prompt in that workspace — the same file the Codex target already
    creates/appends. (Source: dev.to/arindam_1729 hands-on guide)
@@ -62,21 +68,75 @@ as `references/lanes/` being canonical).
   - `all` = claude + codex + antigravity (today: same files as `both`; exists
     so the CLI surface stays honest if the payloads ever diverge).
 - Internal predicate `wants_codex()` is joined by `wants_antigravity()`; the
-  skills/AGENTS.md/config sections key on `wants_agents_payload()`
+  boolean-gated skills and AGENTS.md sections key on `wants_agents_payload()`
   (codex ∨ antigravity ∨ both ∨ all) so the copy loop stays single-sourced.
+  (Config creation is path-selecting, not boolean — see the branch-point list
+  below.)
+- **Every `TARGET_MODE` branch point must gain arms for the new values** —
+  the script runs `set -u`, so a missed arm is a fatal unbound-variable
+  crash, not a silent skip:
+  - The **arg-validation `case`** (lines ~65-68) is the front door: without
+    an `antigravity|all` arm there, the script dies at "--target must be one
+    of: claude, codex, both" before anything else runs. Both `die` usage
+    strings (lines ~52 and ~67) update to the new value list.
+  - `wants_claude()` (line ~81) must also match `all` (else `--target all`
+    skips `.claude/commands`, CLAUDE.md, and the mkdir — violating AC3).
+  - The config-creation `case` (lines ~95-105) stays a raw `case` on
+    `TARGET_MODE` (it selects **which path** to create, not just whether) and
+    gains an `antigravity|all` arm mirroring `codex|both` (else
+    `.ganpan/orchestration.json` is never created for the new targets —
+    violating AC1). `wants_agents_payload()` gates only the boolean-gated
+    sections: the skills copy loop and the AGENTS.md block.
+  - The final next-steps `case` (lines ~221-224) needs `antigravity)` and
+    `all)` arms; with none matching, `LANE_HINT` stays unset and the closing
+    heredoc dies with "unbound variable" **after** all file copies have
+    happened. (`CONFIG_PATH` happens to be recovered by the existing
+    `SELECTED_CONFIG_PATH` fallback at lines ~225-227 — incidental, not a
+    substitute for adding the arms.) **`all)` arm content, pinned:** it
+    mirrors `codex|both`'s `CONFIG_PATH` (`.ganpan/orchestration.json`) and
+    its `LANE_HINT` is the union — the `/ganpan:*`-style Claude lane loop
+    hints **plus** the agy/Codex skills line — since `all` installs both
+    surfaces.
+  - The `LEGACY_CONFIG_FALLBACK` check (line ~113) switches from
+    `wants_codex` to `wants_agents_payload` — the legacy-config semantics
+    follow the payload, not the runtime.
 - The final **next-steps hint** becomes target-aware: for `antigravity` it
   says to run `agy` in the repo, check `/skills` for the `ganpan-*` skills,
-  and invoke lanes by asking for them by name (auto-match on description).
+  and invoke lanes by asking for them by name **or** via the
+  `/<skill-name>` slash form (both styles quoted until AC9 settles which is
+  real — see Research §2).
+- **AC3 stdout semantics, decided:** `--target both` terminal output stays
+  **byte-identical** to today — no additive lines. The "codex/both installs
+  are already agy-compatible" message lives in the docs (SETUP.md/README),
+  not in install.sh output; a stdout diff would weaken the regression guard
+  for the most-used path.
 
-Documentation:
+Documentation (every place that enumerates targets or runtimes):
 
 - `docs/SETUP.md`: add an Antigravity CLI subsection next to the Codex one
-  (install command, `/skills` verification, invocation model).
+  (install command, `/skills` verification, invocation model). Note that
+  `--target codex`/`both` installs are **already agy-compatible on disk**
+  (identical payload) so existing Codex installs need no reinstall.
 - `README.md`: mention Antigravity CLI as a supported runtime where Codex is
   mentioned.
-- `plugins/ganpan-codex/assets/AGENTS.md`: keep shared; wording stays
-  runtime-neutral ("agent skills") — audit for Codex-only phrasing and
-  generalize where trivial.
+- Root `CLAUDE.md` (Layout section, "`--target claude|codex|both`") and root
+  `AGENTS.md` ("for Claude Code and Codex" + the smoke-test block): update
+  the target enumeration and runtime list.
+- `install.sh` line-5 usage comment: update alongside the `die` usage string.
+- `docs/RELEASE_CHECKLIST.md` "deploy surfaces": add a 5th line —
+  "Copy-in Antigravity (`./install.sh <target> --target antigravity`):
+  installs `.agents/skills/ganpan-*` (covered by `tests/antigravity.bats`)" —
+  and bump the section header's "ships four surfaces" to "five".
+- `docs/RELEASE_PLAYBOOK.md` release-surfaces table: add the matching
+  "Copy-in Antigravity" row next to the Copy-in Codex row.
+- `docs/SETUP.md` "Support matrix" table (separate from the install
+  subsection): add an Antigravity CLI skills row alongside the Codex
+  repo-local skills row.
+- `plugins/ganpan-codex/assets/AGENTS.md` **and**
+  `plugins/ganpan-codex/skills/*/SKILL.md` bodies: audit for Codex-only
+  phrasing and generalize where trivial (e.g. ganpan-setup's "Prefer
+  `.ganpan/orchestration.json` for new Codex installs" → "for new installs").
+  AGENTS.md itself was audited and is already runtime-neutral.
 
 Out of scope (YAGNI, recorded for the log):
 
@@ -115,9 +175,28 @@ Out of scope (YAGNI, recorded for the log):
 - **AC4** `--target antigravity` next-steps output mentions `agy` and
   `/skills`; it does not tell the user to run `/ganpan:*` Claude commands.
 - **AC5** Invalid targets still die with a usage error listing the accepted
-  values (updated list).
-- **AC6** `docs/SETUP.md` and `README.md` document the Antigravity install
-  path.
+  values (updated list); the line-5 usage comment matches.
+- **AC6** All target/runtime enumerations are updated: `docs/SETUP.md`
+  (install subsection **and** Support-matrix row, incl. the "codex/both
+  installs are already agy-compatible" note), `README.md`, root `CLAUDE.md`,
+  root `AGENTS.md`, `docs/RELEASE_CHECKLIST.md` (5th deploy surface + header
+  count), and `docs/RELEASE_PLAYBOOK.md` (surfaces-table row).
 - **AC7** bats coverage for AC1–AC5 (new `tests/antigravity.bats` or extension
   of `tests/install.bats`/`tests/codex-skills.bats` following their stub
   patterns); full suite green.
+- **AC8** `plugins/orchestration/.claude-plugin/plugin.json` is bumped to the
+  next **minor** version in the same PR (feat).
+- **AC9** Before release, one manual smoke test against a real `agy` install
+  (run `agy`, confirm `/skills` lists the six `ganpan-*` skills). If agy's
+  discovery chokes on the extra `agents/openai.yaml` files, the recorded
+  contingency is to exclude `agents/openai.yaml` from the antigravity copy
+  path in a follow-up — the shared-payload design deliberately keeps that
+  change one `find`-filter wide. This AC is a release gate, not a bats gate;
+  if no `agy` binary is available to the implementer, the PR must say so and
+  the human merger owns the check. **Enforcement (this repo has
+  `reviewer.autoMerge: true`, which would otherwise merge past this gate):**
+  when the smoke test hasn't been run, the implementer posts a PR comment
+  containing `merge-requested:` context asking for a human merge — or the
+  human applies `status:needs-decision` — so the Reviewer lane's auto-merge
+  path does not fire on its own verdict alone. Advisory PR-body text is not
+  enough.
