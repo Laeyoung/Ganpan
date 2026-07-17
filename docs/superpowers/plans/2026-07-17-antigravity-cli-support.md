@@ -253,7 +253,14 @@ Codex와 동일한 agents-skills payload를 설치합니다 (agy는 `.agents/ski
 ./install.sh <대상-레포-경로> --target antigravity
 ```
 
-설치 항목은 방법 C와 동일합니다. 이미 `--target codex`/`both`로 설치했다면 디스크 상태가 동일하므로 재설치가 필요 없습니다. 설치 후 대상 레포에서 `agy` 실행 → `/skills`에 `ganpan-*` 6종이 보이면 성공. 레인은 이름으로 요청하거나 `/<skill-name>` 슬래시 형태로 호출합니다. Claude + Codex + Antigravity를 한 번에 설치하려면 `--target all`.
+설치되는 항목:
+- `.agents/skills/ganpan-*`
+- `AGENTS.md` Ganpan conventions block
+- `scripts/orchestration/*.sh`
+- `.ganpan/orchestration.json` 템플릿 (기존 `.claude/orchestration.json`만 있으면 legacy fallback 유지)
+- `.github/labels.yml` + issue template
+
+이미 `--target codex`/`both`로 설치했다면 디스크 상태가 동일하므로 재설치가 필요 없습니다. 설치 후 대상 레포에서 `agy` 실행 → `/skills`에 `ganpan-*` 6종이 보이면 성공. 레인은 이름으로 요청하거나 `/<skill-name>` 슬래시 형태로 호출합니다. Claude + Codex + Antigravity를 한 번에 설치하려면 `--target all`.
 ```
 
 - [ ] **Step 3: root CLAUDE.md** — line 20: ``--target claude|codex|both`` → ``--target claude|codex|antigravity|both|all``; Development-section test note "(includes codex-skills.bats)" → "(includes codex-skills.bats, antigravity.bats)".
