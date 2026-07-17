@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Ganpan is a GitHub-native orchestration toolkit for Claude Code and Codex.
+Ganpan is a GitHub-native orchestration toolkit for Claude Code, Codex, and Antigravity CLI.
 
 - `install.sh` installs the toolkit into target repositories.
 - `plugins/orchestration/` contains the shared orchestration engine, Claude commands, assets, and lane references.
@@ -29,6 +29,7 @@ Runs the full test suite.
 ```bash
 ./install.sh /path/to/target --target codex
 ./install.sh /path/to/target --target both
+./install.sh /path/to/target --target antigravity
 ```
 
 Smoke-tests installation flows against a temporary target repo.
@@ -39,7 +40,7 @@ Shell code uses Bash with `set -euo pipefail`. Keep functions small and quote va
 
 ## Testing Guidelines
 
-Tests use Bats. Add regression tests before changing behavior. Installer tests belong in `tests/install.bats`; orchestration script tests belong in `tests/orchestration/*.bats`; Codex skill validation belongs in `tests/codex-skills.bats`. New install behavior should be tested against temporary target repos.
+Tests use Bats. Add regression tests before changing behavior. Installer tests belong in `tests/install.bats`; orchestration script tests belong in `tests/orchestration/*.bats`; Codex skill validation belongs in `tests/codex-skills.bats`; Antigravity install validation belongs in `tests/antigravity.bats`. New install behavior should be tested against temporary target repos.
 
 ## Commit & Pull Request Guidelines
 

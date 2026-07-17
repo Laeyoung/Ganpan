@@ -41,6 +41,23 @@ create `.claude/orchestration.json` unless a legacy config already exists.
 
 For detailed Codex operation, see [CODEX_RUNBOOK.md](CODEX_RUNBOOK.md).
 
+## Install (Antigravity CLI — agy)
+Run:
+
+```bash
+./install.sh <target-repo-path> --target antigravity
+```
+
+Installs the same repo-local agents-skills payload as the Codex target —
+`.agents/skills/ganpan-*`, the `AGENTS.md` conventions block, engine scripts,
+and the `.ganpan/orchestration.json` template. Existing `--target codex`/`both`
+installs are **already agy-compatible on disk** (identical payload); no
+reinstall needed. Verify with `agy` in the repo: `/skills` should list the six
+`ganpan-*` skills. Invoke a lane by asking for it by name (agy auto-matches on
+the skill description) or try the `/<skill-name>` slash form — sources disagree
+on the invocation mechanism; both are documented. To install every surface at
+once, use `--target all`.
+
 ### Upgrading a copy-in install
 `install.sh` re-run upgrades files whose version sentinel differs. **v1 files
 predate the sentinel**, so the first upgrade off a v1 copy must use
@@ -110,6 +127,7 @@ Codex drives each lane by invoking the matching skill directly.
 | Claude Code plugin | first-class | `/ganpan:*` commands |
 | Copy-in Claude install | first-class fallback | `.claude/commands` + scripts |
 | Codex repo-local skills | Phase 1 MVP | `.agents/skills/ganpan-*` |
+| Antigravity CLI skills | Phase 1 (shared payload) | `.agents/skills/ganpan-*` via `--target antigravity` |
 | CLI runner | planned | `ganpan lane ...` |
 | Codex plugin | planned | Codex plugin install |
 

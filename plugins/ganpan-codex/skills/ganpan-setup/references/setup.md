@@ -9,7 +9,7 @@ Run from the target repository root.
    ```
 2. Ensure a config exists. New Codex installs use `.ganpan/orchestration.json`. If only `.claude/orchestration.json` exists, use it as a legacy fallback and recommend deliberate migration.
 3. Install `.github/labels.yml` and `.github/ISSUE_TEMPLATE/task.yml` only when absent.
-4. Merge Ganpan conventions into the agent instructions file once — `CLAUDE.md` for the Claude Code surface, `AGENTS.md` for the Codex surface.
+4. Merge Ganpan conventions into the agent instructions file once — `CLAUDE.md` for the Claude Code surface, `AGENTS.md` for the Codex and Antigravity surfaces.
 5. Bootstrap labels:
    ```bash
    scripts/orchestration/bootstrap-labels.sh .github/labels.yml

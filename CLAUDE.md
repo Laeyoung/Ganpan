@@ -6,7 +6,7 @@ Commands namespace as `/ganpan:*`. Single source of truth lives under
 
 ## Development
 ```bash
-bats tests/*.bats tests/orchestration/*.bats   # full test suite (includes codex-skills.bats)
+bats tests/*.bats tests/orchestration/*.bats   # full test suite (includes codex-skills.bats, antigravity.bats)
 shellcheck plugins/orchestration/scripts/orchestration/*.sh
 jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json  # validate manifests
 ```
@@ -17,7 +17,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 - `plugins/orchestration/references/lanes/` — shared lane-protocol references (canonical; Codex skills copy these, Claude commands point at them).
 - `plugins/orchestration/assets/` — files copied into target repos (config template, labels, issue template, CLAUDE.md).
 - `plugins/ganpan-codex/skills/` — Codex repo-local skill source (`ganpan-*`), installed to `.agents/skills/`.
-- `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`; `--target claude|codex|both`).
+- `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`; `--target claude|codex|antigravity|both|all`).
 
 ## Gotchas
 - **Never rename engine internals** (`scripts/orchestration/`, the `orchestration.json` config filename, the `ganpan-orchestration` version sentinel) — they are the deployed runtime contract, decoupled from the plugin name.

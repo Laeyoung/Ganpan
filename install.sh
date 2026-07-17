@@ -2,7 +2,7 @@
 # install.sh — install the GitHub-native orchestration toolkit into a target repo.
 #
 # Usage:
-#   ./install.sh <target-repo-path> [--target claude|codex|both] [--force]
+#   ./install.sh <target-repo-path> [--target claude|codex|antigravity|both|all] [--force]
 #
 # Copies the portable toolkit (scripts, lane commands, labels, issue template,
 # setup docs) into <target-repo-path>. Repo-specific files are handled safely:
@@ -49,7 +49,7 @@ while [ "$#" -gt 0 ]; do
     --force) FORCE=1 ;;
     --target)
       shift
-      [ "$#" -gt 0 ] || die "--target requires claude, codex, or both"
+      [ "$#" -gt 0 ] || die "--target requires claude, codex, antigravity, both, or all"
       TARGET_MODE="$1"
       ;;
     --target=*)
@@ -63,8 +63,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$TARGET_MODE" in
-  claude|codex|both) ;;
-  *) die "--target must be one of: claude, codex, both" ;;
+  claude|codex|antigravity|both|all) ;;
+  *) die "--target must be one of: claude, codex, antigravity, both, all" ;;
 esac
 [ -n "$TARGET" ] || die "usage: ./install.sh <target-repo-path>"
 [ -d "$TARGET" ] || die "target is not a directory: $TARGET"
@@ -78,8 +78,12 @@ echo "  into: $TARGET"
 echo "  target: $TARGET_MODE"
 echo
 
-wants_claude() { [ "$TARGET_MODE" = "claude" ] || [ "$TARGET_MODE" = "both" ]; }
+wants_claude() { [ "$TARGET_MODE" = "claude" ] || [ "$TARGET_MODE" = "both" ] || [ "$TARGET_MODE" = "all" ]; }
 wants_codex() { [ "$TARGET_MODE" = "codex" ] || [ "$TARGET_MODE" = "both" ]; }
+wants_antigravity() { [ "$TARGET_MODE" = "antigravity" ] || [ "$TARGET_MODE" = "all" ]; }
+# Codex and Antigravity consume the identical repo-local agents-skills payload
+# (.agents/skills/ganpan-* + AGENTS.md); gate shared sections on the union.
+wants_agents_payload() { wants_codex || wants_antigravity; }
 
 # --- 1. assets (plain "if absent" guard; not sentinel-stamped) ----------------
 echo "Copying files:"
@@ -97,7 +101,7 @@ if [ ! -f "$TARGET/.ganpan/orchestration.json" ] && [ ! -f "$TARGET/.claude/orch
       mkdir -p "$TARGET/.claude"
       cp "$PLUGIN/assets/orchestration.json" "$TARGET/.claude/orchestration.json"
       ;;
-    codex|both)
+    codex|both|antigravity|all)
       mkdir -p "$TARGET/.ganpan"
       cp "$PLUGIN/assets/orchestration.json" "$TARGET/.ganpan/orchestration.json"
       ;;
@@ -110,7 +114,7 @@ elif [ -f "$TARGET/.claude/orchestration.json" ]; then
   SELECTED_CONFIG_PATH=".claude/orchestration.json"
 fi
 LEGACY_CONFIG_FALLBACK=""
-if wants_codex && [ "$SELECTED_CONFIG_PATH" = ".claude/orchestration.json" ]; then
+if wants_agents_payload && [ "$SELECTED_CONFIG_PATH" = ".claude/orchestration.json" ]; then
   LEGACY_CONFIG_FALLBACK=1
 fi
 mkdir -p "$TARGET/docs"
@@ -170,8 +174,8 @@ if wants_claude; then
   info ".claude/commands/{work-issue,work-issue-deep,triage,review-queue,review-queue-deep,qa-check,run-all,update}.md"
 fi
 
-# --- 5. Codex skills ----------------------------------------------------------
-if wants_codex; then
+# --- 5. Codex/Antigravity skills (shared agents-skills payload) ----------------
+if wants_agents_payload; then
   [ -d "$CODEX_PLUGIN/skills" ] || die "Codex skill source not found: $CODEX_PLUGIN/skills"
   while IFS= read -r src; do
     rel="${src#"$CODEX_PLUGIN/skills/"}"
@@ -202,7 +206,7 @@ if wants_claude; then
   fi
 fi
 
-if wants_codex; then
+if wants_agents_payload; then
   echo "Conventions (AGENTS.md):"
   CODEX_SENTINEL="<!-- ganpan-codex-conventions -->"
   DST_AGENTS="$TARGET/AGENTS.md"
@@ -221,6 +225,8 @@ fi
 case "$TARGET_MODE" in
   claude) CONFIG_PATH=".claude/orchestration.json"; LANE_HINT="/loop /ganpan:work-issue · /loop 10m /ganpan:triage · /loop 5m /ganpan:review-queue · /ganpan:qa-check · (all at once) /loop 20m /ganpan:run-all" ;;
   codex|both) CONFIG_PATH=".ganpan/orchestration.json"; LANE_HINT="Use Codex skills: ganpan-work-issue · ganpan-triage · ganpan-review-queue · ganpan-qa-check" ;;
+  antigravity) CONFIG_PATH=".ganpan/orchestration.json"; LANE_HINT="Run agy in the repo — /skills should list the ganpan-* skills; invoke a lane by asking for it by name (or try /ganpan-<lane>)" ;;
+  all) CONFIG_PATH=".ganpan/orchestration.json"; LANE_HINT="/loop /ganpan:work-issue · /loop 10m /ganpan:triage · /loop 5m /ganpan:review-queue · /ganpan:qa-check · (all at once) /loop 20m /ganpan:run-all — plus Codex/agy skills: ganpan-work-issue · ganpan-triage · ganpan-review-queue · ganpan-qa-check" ;;
 esac
 if [ -n "$SELECTED_CONFIG_PATH" ]; then
   CONFIG_PATH="$SELECTED_CONFIG_PATH"

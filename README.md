@@ -1,6 +1,6 @@
 # Ganpan (간판)
 
-**GitHub-native 멀티 에이전트 오케스트레이션 툴킷** — Issues / PRs / 라벨을 단일 상태 머신으로 삼아, 여러 AI 에이전트가 **Triager → Coder → Reviewer → QA** 레인을 나눠 협업하도록 만드는 Claude Code + Codex 지원 툴킷입니다.
+**GitHub-native 멀티 에이전트 오케스트레이션 툴킷** — Issues / PRs / 라벨을 단일 상태 머신으로 삼아, 여러 AI 에이전트가 **Triager → Coder → Reviewer → QA** 레인을 나눠 협업하도록 만드는 Claude Code + Codex + Antigravity CLI 지원 툴킷입니다.
 
 별도의 큐나 DB 없이 GitHub 자체를 작업 보드로 사용합니다. 각 이슈는 `status:*` 라벨로 상태가 표현되고, 에이전트들은 라벨을 보고 자기 일을 집어가며, **머지는 항상 사람이** 합니다(branch protection으로 강제).
 
@@ -52,6 +52,7 @@ gh auth status            # 인증 확인 (HTTPS 권장)
 | Claude Code plugin | first-class | `/ganpan:*` commands |
 | Copy-in Claude install | first-class fallback | `.claude/commands` + scripts |
 | Codex repo-local skills | Phase 1 MVP | `.agents/skills/ganpan-*` |
+| Antigravity CLI skills | Phase 1 (shared payload) | `.agents/skills/ganpan-*` |
 | CLI runner | planned | `ganpan lane ...` |
 | Codex plugin | planned | Codex plugin install |
 
@@ -109,6 +110,23 @@ Claude와 Codex surface를 함께 설치하려면:
 ```
 
 설치 후 설정·라벨 부트스트랩·검증·레인 실행·트러블슈팅까지의 전체 절차는 **[`docs/CODEX_RUNBOOK.md`](docs/CODEX_RUNBOOK.md)** 를 따르세요.
+
+### 방법 D — Antigravity CLI (agy) repo-local skills
+
+Codex와 동일한 agents-skills payload를 설치합니다 (agy는 `.agents/skills/<name>/SKILL.md`를 읽습니다):
+
+```bash
+./install.sh <대상-레포-경로> --target antigravity
+```
+
+설치되는 항목:
+- `.agents/skills/ganpan-*`
+- `AGENTS.md` Ganpan conventions block
+- `scripts/orchestration/*.sh`
+- `.ganpan/orchestration.json` 템플릿 (기존 `.claude/orchestration.json`만 있으면 legacy fallback 유지)
+- `.github/labels.yml` + issue template
+
+이미 `--target codex`/`both`로 설치했다면 디스크 상태가 동일하므로 재설치가 필요 없습니다. 설치 후 대상 레포에서 `agy` 실행 → `/skills`에 `ganpan-*` 6종이 보이면 성공. 레인은 이름으로 요청하거나 `/<skill-name>` 슬래시 형태로 호출합니다. Claude + Codex + Antigravity를 한 번에 설치하려면 `--target all`.
 
 ---
 
