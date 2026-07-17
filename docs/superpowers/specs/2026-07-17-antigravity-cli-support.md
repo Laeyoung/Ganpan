@@ -127,9 +127,11 @@ Documentation (every place that enumerates targets or runtimes):
   (identical payload) so existing Codex installs need no reinstall.
 - `README.md`: mention Antigravity CLI as a supported runtime where Codex is
   mentioned.
-- Root `CLAUDE.md` (Layout section, "`--target claude|codex|both`") and root
-  `AGENTS.md` ("for Claude Code and Codex" + the smoke-test block): update
-  the target enumeration and runtime list.
+- Root `CLAUDE.md` (Layout section, "`--target claude|codex|both`"; also the
+  Development section's "full test suite (includes codex-skills.bats)" note)
+  and root `AGENTS.md` ("for Claude Code and Codex", the smoke-test block,
+  and the Testing-Guidelines test-file-ownership line): update the target
+  enumeration, runtime list, and test-suite mentions to include antigravity.
 - `install.sh` line-5 usage comment: update alongside the `die` usage string.
 - `docs/RELEASE_CHECKLIST.md` "deploy surfaces": add a 5th line —
   "Copy-in Antigravity (`./install.sh <target> --target antigravity`):
@@ -197,9 +199,10 @@ Out of scope (YAGNI, recorded for the log):
   count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row),
   `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule), and
   `docs/CODEX_RUNBOOK.md` (shared-payload note).
-- **AC7** bats coverage for AC1–AC5 (new `tests/antigravity.bats` or extension
-  of `tests/install.bats`/`tests/codex-skills.bats` following their stub
-  patterns); full suite green.
+- **AC7** bats coverage for AC1–AC5 in a **new `tests/antigravity.bats`**
+  (pinned — the RELEASE_CHECKLIST surface line names this file) following the
+  `tests/install.bats`/`tests/codex-skills.bats` stub patterns; full suite
+  green.
 - **AC8** `plugins/orchestration/.claude-plugin/plugin.json` is bumped to the
   next **minor** version in the same PR (feat).
 - **AC9** Before release, one manual smoke test against a real `agy` install
@@ -221,4 +224,23 @@ Out of scope (YAGNI, recorded for the log):
   the label to `status:in-review` for the normal flow) or merges manually.
   If the implementer *can* run `agy` locally, run the smoke test before the
   transition and record the result in the PR body — then the normal
-  auto-merge flow is fine.
+  auto-merge flow is fine. **Binding scope:** the generic lane protocol
+  (`work-issue.md` step 9) transitions unconditionally and is deliberately
+  NOT modified — encoding a one-shot release gate into the permanent lane
+  instructions would outlive its purpose (recorded out-of-scope). Instead
+  this condition binds the session implementing *this spec*: the deep lane's
+  transition step is executed by the same agent that executes this spec, so
+  "hold the transition until the smoke test or human handoff" is a step of
+  this implementation, verified at PR review time by checking the issue's
+  label state against the PR body's smoke-test section. **Time decay of the
+  hold (verified against `reclaim.sh`):** if the hold outlasts
+  `reclaim.timeoutMinutes` without a heartbeat, the orphan sweep flips the
+  issue to `status:blocked` (open PR exists → "사람 확인 필요" comment) —
+  an acceptable degraded state: still never `status:in-review`, so the
+  Reviewer/auto-merge path stays closed, and a human is explicitly
+  summoned. The gate therefore holds in both the fresh and the timed-out
+  state; no work-issue.md change is needed for either. A re-claimed or
+  resumed run is equally bound: this spec is the issue's implementation
+  contract (linked from the issue/PR), and the PR body must restate the
+  hold instruction so any later session executing against the PR sees it
+  before touching labels.
