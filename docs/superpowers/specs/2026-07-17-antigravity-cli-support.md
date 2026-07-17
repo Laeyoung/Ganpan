@@ -203,10 +203,11 @@ Out of scope (YAGNI, recorded for the log):
   root `AGENTS.md`, `docs/RELEASE_CHECKLIST.md` (5th deploy surface + header
   count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row),
   `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule),
-  `docs/CODEX_RUNBOOK.md` (shared-payload note), and the setup lane
+  `docs/CODEX_RUNBOOK.md` (shared-payload note), the setup lane
   reference pair (`plugins/orchestration/references/lanes/setup.md` +
   `plugins/ganpan-codex/skills/ganpan-setup/references/setup.md`, runtime
-  enumeration line).
+  enumeration line), and `plugins/ganpan-codex/skills/*/SKILL.md` bodies
+  (audited and generalized for Codex-only phrasing per the Design bullet).
 - **AC7** bats coverage for AC1–AC5 in a **new `tests/antigravity.bats`**
   (pinned — the RELEASE_CHECKLIST surface line names this file) following the
   `tests/install.bats`/`tests/codex-skills.bats` stub patterns; full suite
@@ -248,11 +249,14 @@ Out of scope (YAGNI, recorded for the log):
   an acceptable degraded state: still never `status:in-review`, so the
   Reviewer/auto-merge path stays closed, and a human is explicitly
   summoned. The gate therefore holds in both the fresh and the timed-out
-  state; no work-issue.md change is needed for either. A re-claimed or
-  resumed run is equally bound: this spec is the issue's implementation
-  contract (linked from the issue/PR), and the PR body must restate the
-  hold instruction so any later session executing against the PR sees it
-  before touching labels. **Technical backstop (covers a violated hold):**
+  state; no work-issue.md change is needed for either. The PR body must
+  still restate the hold instruction — but honestly scoped: for a plain
+  re-claim (human relabels the blocked issue back to `status:agent-ready`),
+  the lane protocol reaches steps 9–10 without any step that forces reading
+  the PR body first, so the restatement relies on session/human diligence,
+  not a wired check. **The draft-PR backstop below is the only mechanical
+  guard on that path** (no lane script marks a PR ready-for-review), and it
+  is sufficient: labels may flip, but the merge cannot. **Technical backstop (covers a violated hold):**
   the PR is opened as a **draft** and marked ready-for-review only once the
   smoke test passes (or the human takes over). `auto-merge.sh` merges only
   on `mergeStateStatus == CLEAN`, and a draft PR reports `DRAFT`, never
