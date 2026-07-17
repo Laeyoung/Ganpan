@@ -137,8 +137,10 @@ Documentation (every place that enumerates targets or runtimes):
   "Copy-in Antigravity (`./install.sh <target> --target antigravity`):
   installs `.agents/skills/ganpan-*` (covered by `tests/antigravity.bats`)" —
   and bump the section header's "ships four surfaces" to "five".
-- `docs/RELEASE_PLAYBOOK.md` release-surfaces table: add the matching
-  "Copy-in Antigravity" row next to the Copy-in Codex row.
+- `docs/RELEASE_PLAYBOOK.md`: add the matching "Copy-in Antigravity" row to
+  the release-surfaces table, **and** extend the §7 manual-verification
+  checklist's copy-in line ("and `--target codex` / `--target both`") to
+  include `--target antigravity`.
 - `docs/SETUP.md` "Support matrix" table (separate from the install
   subsection): add an Antigravity CLI skills row alongside the Codex
   repo-local skills row.
@@ -201,7 +203,8 @@ Out of scope (YAGNI, recorded for the log):
   (install subsection **and** Support-matrix row, incl. the "codex/both
   installs are already agy-compatible" note), `README.md`, root `CLAUDE.md`,
   root `AGENTS.md`, `docs/RELEASE_CHECKLIST.md` (5th deploy surface + header
-  count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row),
+  count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row **and** the §7
+  manual-verification copy-in line),
   `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule),
   `docs/CODEX_RUNBOOK.md` (shared-payload note), the setup lane
   reference pair (`plugins/orchestration/references/lanes/setup.md` +
