@@ -23,11 +23,19 @@ Code나 Codex처럼 ganpan을 설치하고 사용 가능").
 Verified against Google's codelab and third-party writeups (the official docs
 site is JS-rendered and not fetchable headlessly):
 
-1. **Skill format.** Antigravity CLI discovers workspace skills at
+1. **Skill format — layout disputed between sources; we follow the codelab.**
+   Google's own codelab demonstrates workspace skills at
    `.agents/skills/<skill-name>/SKILL.md` with YAML frontmatter carrying
-   `name:` and `description:`. This is **byte-compatible with what ganpan's
-   Codex target already ships** — same path, same layout, same frontmatter.
-   (Source: codelabs.developers.google.com/antigravity/how-to-create-agent-skills-for-antigravity-cli)
+   `name:` and `description:` — **byte-compatible with what ganpan's Codex
+   target already ships** (same path, layout, frontmatter). The dev.to
+   hands-on guide instead shows a *flat* file (`.agents/skills/lint.md` →
+   `/lint`, no subdirectory/SKILL.md/frontmatter). We bet on the codelab (the
+   primary, Google-authored source; the two layouts are also not mutually
+   exclusive — agy may accept both), and AC9's smoke test is the only real
+   check of which layout `agy` honors; if the directory form is not
+   discovered, that surfaces there before release.
+   (Sources: codelabs.developers.google.com/antigravity/how-to-create-agent-skills-for-antigravity-cli;
+   dev.to/arindam_1729 hands-on guide)
 2. **Invocation — mechanism contested between sources.** The codelab shows
    natural-language intent activation against the frontmatter `description`
    (with a permission prompt); the dev.to hands-on guide instead describes
@@ -132,6 +140,12 @@ Documentation (every place that enumerates targets or runtimes):
 - `docs/SETUP.md` "Support matrix" table (separate from the install
   subsection): add an Antigravity CLI skills row alongside the Codex
   repo-local skills row.
+- `docs/CODEX_ADAPTER_RULES.md` and `docs/CODEX_RUNBOOK.md`: both enumerate
+  `--target codex`/`both` install-time invariants (no-`.claude/commands`
+  rule, smoke file-list, legacy-config fallback). CODEX_ADAPTER_RULES.md
+  gains an antigravity-parity rule (the shared payload means every codex
+  invariant holds for `--target antigravity` too); CODEX_RUNBOOK.md gets a
+  one-line shared-payload note pointing agy users at the same runbook.
 - `plugins/ganpan-codex/assets/AGENTS.md` **and**
   `plugins/ganpan-codex/skills/*/SKILL.md` bodies: audit for Codex-only
   phrasing and generalize where trivial (e.g. ganpan-setup's "Prefer
@@ -180,7 +194,9 @@ Out of scope (YAGNI, recorded for the log):
   (install subsection **and** Support-matrix row, incl. the "codex/both
   installs are already agy-compatible" note), `README.md`, root `CLAUDE.md`,
   root `AGENTS.md`, `docs/RELEASE_CHECKLIST.md` (5th deploy surface + header
-  count), and `docs/RELEASE_PLAYBOOK.md` (surfaces-table row).
+  count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row),
+  `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule), and
+  `docs/CODEX_RUNBOOK.md` (shared-payload note).
 - **AC7** bats coverage for AC1–AC5 (new `tests/antigravity.bats` or extension
   of `tests/install.bats`/`tests/codex-skills.bats` following their stub
   patterns); full suite green.
@@ -191,12 +207,18 @@ Out of scope (YAGNI, recorded for the log):
   discovery chokes on the extra `agents/openai.yaml` files, the recorded
   contingency is to exclude `agents/openai.yaml` from the antigravity copy
   path in a follow-up — the shared-payload design deliberately keeps that
-  change one `find`-filter wide. This AC is a release gate, not a bats gate;
-  if no `agy` binary is available to the implementer, the PR must say so and
-  the human merger owns the check. **Enforcement (this repo has
-  `reviewer.autoMerge: true`, which would otherwise merge past this gate):**
-  when the smoke test hasn't been run, the implementer posts a PR comment
-  containing `merge-requested:` context asking for a human merge — or the
-  human applies `status:needs-decision` — so the Reviewer lane's auto-merge
-  path does not fire on its own verdict alone. Advisory PR-body text is not
-  enough.
+  change one `find`-filter wide. This AC is a release gate, not a bats gate.
+  **Enforcement (this repo has `reviewer.autoMerge: true`; verified against
+  `review-queue.md` R-D + `auto-merge.sh`, neither a `merge-requested:`
+  comment nor a bare `status:needs-decision` label actually blocks the
+  auto-merge path — the marker guard is unreachable once autoMerge is on and
+  a label without a bot gate is auto-stripped):** the gate must live in what
+  the lanes genuinely honor — the **issue's lane state**. If the smoke test
+  has not been run by PR time, the implementer does **not** transition the
+  issue to `status:in-review` (it stays `status:in-progress`, PR open, with
+  an explanatory issue comment); the Reviewer lane never picks the PR up, so
+  auto-merge cannot fire. The human either runs the smoke test (then flips
+  the label to `status:in-review` for the normal flow) or merges manually.
+  If the implementer *can* run `agy` locally, run the smoke test before the
+  transition and record the result in the PR body — then the normal
+  auto-merge flow is fine.
