@@ -126,7 +126,8 @@ Documentation (every place that enumerates targets or runtimes):
   `--target codex`/`both` installs are **already agy-compatible on disk**
   (identical payload) so existing Codex installs need no reinstall.
 - `README.md`: mention Antigravity CLI as a supported runtime where Codex is
-  mentioned.
+  mentioned, **and** add an Antigravity CLI skills row to the "지원 표면"
+  table (it mirrors SETUP.md's Support matrix — both tables gain the row).
 - Root `CLAUDE.md` (Layout section, "`--target claude|codex|both`"; also the
   Development section's "full test suite (includes codex-skills.bats)" note)
   and root `AGENTS.md` ("for Claude Code and Codex", the smoke-test block,
@@ -261,7 +262,13 @@ Out of scope (YAGNI, recorded for the log):
   guard on that path** (no lane script marks a PR ready-for-review), and it
   is sufficient: labels may flip, but the merge cannot. **Technical backstop (covers a violated hold):**
   the PR is opened as a **draft** and marked ready-for-review only once the
-  smoke test passes (or the human takes over). `auto-merge.sh` merges only
+  smoke test passes (or the human takes over). Binding, same technique as
+  the label hold: the implementing session (the one executing this spec)
+  passes `--draft` on its own `gh pr create` invocation — the generic
+  work-issue-deep.md step-7 command has no `--draft` flag, so this is an
+  explicit obligation of this implementation, not an inherited default —
+  and runs `gh pr ready <n>` only after the smoke test passes or the human
+  hands off. `auto-merge.sh` merges only
   on `mergeStateStatus == CLEAN`, and a draft PR reports `DRAFT`, never
   `CLEAN` — so even if the labels are flipped erroneously and the Reviewer
   lane reaches its R-D auto-merge rule, the merge cannot fire. No lane code
