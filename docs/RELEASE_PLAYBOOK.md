@@ -70,7 +70,7 @@ report as "latest."
 ### 7. Verify the release reached users
 - Fresh checkout / scratch repo: `/plugin` → update `ganpan@laeyoung`; confirm
   the new version resolves and commands namespace as `/ganpan:*`.
-- Copy-in path: `./install.sh <scratch-repo>` (and `--target codex` / `--target both`)
+- Copy-in path: `./install.sh <scratch-repo>` (and `--target codex` / `--target both` / `--target antigravity`)
   installs without error.
 - Smoke-test one lane end-to-end against a throwaway issue.
 
@@ -89,6 +89,7 @@ There is no tag to revert to; roll back the same way you shipped:
 | Plugin (`ganpan@laeyoung`) | marketplace pull of `main` | `jq` manifest validation |
 | Copy-in Claude | `./install.sh <target>` | `tests/install.bats` |
 | Copy-in Codex | `./install.sh <target> --target codex` | `tests/codex-skills.bats` |
+| Copy-in Antigravity | `./install.sh <target> --target antigravity` | `tests/antigravity.bats` |
 | Config discovery | `$ORCH_CONFIG` → `.ganpan/` → `.claude/` (legacy) | `tests/orchestration/lib.bats` |
 
 ## Current release readiness

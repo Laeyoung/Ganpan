@@ -29,11 +29,12 @@ gate between "works on my branch" and "shipped to every installed user."
 
 ## 3. Distribution surfaces still install
 
-Ganpan ships four surfaces; a release must not break any of them.
+Ganpan ships five surfaces; a release must not break any of them.
 
 - [ ] **Plugin** (`ganpan@laeyoung`): marketplace manifest points at `./plugins/orchestration` and parses (covered by §1).
 - [ ] **Copy-in Claude** (`./install.sh <target>`): install path rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./` (covered by `tests/install.bats`).
 - [ ] **Copy-in Codex** (`./install.sh <target> --target codex`): installs `.agents/skills/ganpan-*` (covered by `tests/codex-skills.bats`).
+- [ ] **Copy-in Antigravity** (`./install.sh <target> --target antigravity`): installs `.agents/skills/ganpan-*` (covered by `tests/antigravity.bats`).
 - [ ] **Config discovery** unchanged: `$ORCH_CONFIG` → `./.ganpan/orchestration.json` → `./.claude/orchestration.json` (legacy).
 
 ## 4. Docs & changelog

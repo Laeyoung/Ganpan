@@ -43,6 +43,8 @@ For a repo that should support both Claude Code and Codex:
 ./install.sh /path/to/target-repo --target both
 ```
 
+Antigravity CLI (agy) reads the same `.agents/skills/ganpan-*` payload — `--target antigravity` installs it identically, and this runbook applies unchanged.
+
 The Codex target installs:
 
 - `.agents/skills/ganpan-*`

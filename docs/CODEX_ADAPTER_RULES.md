@@ -73,6 +73,7 @@ Rules:
 - `--target codex` must not write `.claude/commands`.
 - `--target codex` must not rewrite existing `.claude/` files.
 - `--target both` must not duplicate config side effects.
+- `--target antigravity` installs the identical agents-skills payload; every `--target codex` invariant above applies to it verbatim (antigravity parity).
 - Existing user-owned files without Ganpan sentinels are skipped unless `--force` is used.
 - Generated/copied shell scripts must remain executable after stamping.
 - Installer output must never print token values.
