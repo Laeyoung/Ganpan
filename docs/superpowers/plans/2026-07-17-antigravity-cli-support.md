@@ -239,7 +239,7 @@ auto-matches on the skill description) or try the `/<skill-name>` slash
 form — sources disagree on the invocation mechanism; both are documented.
 ```
 
-- [ ] **Step 2: README.md** — "지원 표면" table (line ~54) gains:
+- [ ] **Step 2: README.md** — top tagline (line 3): "Claude Code + Codex 지원 툴킷" → "Claude Code + Codex + Antigravity CLI 지원 툴킷". Then the "지원 표면" table (line ~54) gains:
 ```markdown
 | Antigravity CLI skills | Phase 1 (shared payload) | `.agents/skills/ganpan-*` |
 ```
