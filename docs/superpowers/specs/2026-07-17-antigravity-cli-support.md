@@ -126,8 +126,12 @@ Documentation (every place that enumerates targets or runtimes):
   `--target codex`/`both` installs are **already agy-compatible on disk**
   (identical payload) so existing Codex installs need no reinstall.
 - `README.md`: mention Antigravity CLI as a supported runtime where Codex is
-  mentioned, **and** add an Antigravity CLI skills row to the "지원 표면"
-  table (it mirrors SETUP.md's Support matrix — both tables gain the row).
+  mentioned, add an Antigravity CLI skills row to the "지원 표면" table (it
+  mirrors SETUP.md's Support matrix — both tables gain the row), **and**
+  give the install-methods section a runnable
+  `./install.sh <target> --target antigravity` command example with the
+  installed-items list, mirroring the Codex subsection's precision — a
+  prose mention plus table row alone does not satisfy this bullet.
 - Root `CLAUDE.md` (Layout section, "`--target claude|codex|both`"; also the
   Development section's "full test suite (includes codex-skills.bats)" note)
   and root `AGENTS.md` ("for Claude Code and Codex", the smoke-test block,
