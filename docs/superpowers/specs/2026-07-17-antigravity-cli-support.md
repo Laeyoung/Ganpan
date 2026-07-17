@@ -153,6 +153,11 @@ Documentation (every place that enumerates targets or runtimes):
   phrasing and generalize where trivial (e.g. ganpan-setup's "Prefer
   `.ganpan/orchestration.json` for new Codex installs" → "for new installs").
   AGENTS.md itself was audited and is already runtime-neutral.
+- `plugins/orchestration/references/lanes/setup.md` line 12 **and its Codex
+  copy** `plugins/ganpan-codex/skills/ganpan-setup/references/setup.md`:
+  "`AGENTS.md` for the Codex surface" → "`AGENTS.md` for the Codex and
+  Antigravity surfaces" (the shared payload ships this reference to agy
+  installs too).
 
 Out of scope (YAGNI, recorded for the log):
 
@@ -197,8 +202,11 @@ Out of scope (YAGNI, recorded for the log):
   installs are already agy-compatible" note), `README.md`, root `CLAUDE.md`,
   root `AGENTS.md`, `docs/RELEASE_CHECKLIST.md` (5th deploy surface + header
   count), `docs/RELEASE_PLAYBOOK.md` (surfaces-table row),
-  `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule), and
-  `docs/CODEX_RUNBOOK.md` (shared-payload note).
+  `docs/CODEX_ADAPTER_RULES.md` (antigravity-parity rule),
+  `docs/CODEX_RUNBOOK.md` (shared-payload note), and the setup lane
+  reference pair (`plugins/orchestration/references/lanes/setup.md` +
+  `plugins/ganpan-codex/skills/ganpan-setup/references/setup.md`, runtime
+  enumeration line).
 - **AC7** bats coverage for AC1–AC5 in a **new `tests/antigravity.bats`**
   (pinned — the RELEASE_CHECKLIST surface line names this file) following the
   `tests/install.bats`/`tests/codex-skills.bats` stub patterns; full suite
@@ -225,8 +233,9 @@ Out of scope (YAGNI, recorded for the log):
   If the implementer *can* run `agy` locally, run the smoke test before the
   transition and record the result in the PR body — then the normal
   auto-merge flow is fine. **Binding scope:** the generic lane protocol
-  (`work-issue.md` step 9) transitions unconditionally and is deliberately
-  NOT modified — encoding a one-shot release gate into the permanent lane
+  (`work-issue.md` steps 9–10 — the project sync to "In Review" and the
+  label move, held **together** so board and label never disagree)
+  transitions unconditionally and is deliberately NOT modified — encoding a one-shot release gate into the permanent lane
   instructions would outlive its purpose (recorded out-of-scope). Instead
   this condition binds the session implementing *this spec*: the deep lane's
   transition step is executed by the same agent that executes this spec, so
@@ -243,4 +252,11 @@ Out of scope (YAGNI, recorded for the log):
   resumed run is equally bound: this spec is the issue's implementation
   contract (linked from the issue/PR), and the PR body must restate the
   hold instruction so any later session executing against the PR sees it
-  before touching labels.
+  before touching labels. **Technical backstop (covers a violated hold):**
+  the PR is opened as a **draft** and marked ready-for-review only once the
+  smoke test passes (or the human takes over). `auto-merge.sh` merges only
+  on `mergeStateStatus == CLEAN`, and a draft PR reports `DRAFT`, never
+  `CLEAN` — so even if the labels are flipped erroneously and the Reviewer
+  lane reaches its R-D auto-merge rule, the merge cannot fire. No lane code
+  changes needed; the backstop rides entirely on existing fail-closed
+  checks.
