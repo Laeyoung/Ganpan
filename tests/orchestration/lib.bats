@@ -297,3 +297,33 @@ JSON
   [ "$status" -eq 0 ]
   ! grep -q 'api user' "$GH_CALLS"
 }
+
+# --- zsh sourcing hygiene (#86) ----------------------------------------------
+# lib.sh arms `set -u` for the *sourcing* shell (line 3), so any unguarded parameter it
+# touches warns regardless of the caller's own options. `BASH_SOURCE` does not exist in
+# zsh, and the lane commands instruct agents to `source .../lib.sh` — under a zsh operator
+# shell that printed a warning on every lane start, which already caused one misdiagnosis.
+# Guard both the silence and the absence of the dead export that produced it.
+
+@test "sourcing lib.sh under zsh emits nothing on stderr" {
+  command -v zsh >/dev/null || skip "zsh not installed"
+  run zsh -c 'source "$1" 2>&1 1>/dev/null' zsh "$LIB"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sourcing lib.sh under zsh still yields working helpers" {
+  command -v zsh >/dev/null || skip "zsh not installed"
+  run zsh -c 'source "$1"; load_config; echo "$REPO|$BOT"' zsh "$LIB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "o/r|botx" ]
+}
+
+@test "lib.sh defines no SCRIPT_DIR — every script computes its own DIR" {
+  # Reintroducing it would restore the zsh warning; each engine script already does
+  # DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" locally before sourcing lib.sh.
+  run grep -nE '^[[:space:]]*(export[[:space:]]+)?SCRIPT_DIR=' "$LIB"
+  [ "$status" -ne 0 ]
+  run bash -c 'source "$0"; echo "${SCRIPT_DIR-<unset>}"' "$LIB"
+  [ "$output" = "<unset>" ]
+}
