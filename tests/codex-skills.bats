@@ -113,7 +113,9 @@ setup() {
     plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
     plugins/orchestration/assets/CLAUDE.md \
     CLAUDE.md \
-    README.md ; do
+    README.md \
+    docs/RELEASE_CHECKLIST.md \
+    docs/RELEASE_PLAYBOOK.md ; do
     run grep -F 'Closes #' "$REPO_ROOT/$rel"
     [ "$status" -ne 0 ]
   done
@@ -122,10 +124,21 @@ setup() {
     plugins/orchestration/commands/work-issue.md \
     plugins/orchestration/commands/work-issue-deep.md \
     plugins/orchestration/references/lanes/work-issue.md \
-    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md ; do
+    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
+    docs/RELEASE_CHECKLIST.md \
+    docs/RELEASE_PLAYBOOK.md ; do
     run grep -F 'Refs #' "$REPO_ROOT/$rel"
     [ "$status" -eq 0 ]
   done
+  # #78: the guard above lists files one by one, so a *new* doc could reintroduce the
+  # keyword unnoticed. Sweep all of docs/ except the historical records (docs/log,
+  # docs/superpowers), which quote the old convention as history and must not change.
+  hits=""
+  while IFS= read -r f; do
+    case "$f" in */docs/log/*|*/docs/superpowers/*) continue ;; esac
+    hits="$hits $f"
+  done < <(grep -rlF 'Closes #' "$REPO_ROOT/docs" --include='*.md' || true)
+  [ -z "$hits" ]
   # AC3: qa-check docs state the non-closing design (and drop the old inaccurate phrasing).
   for rel in \
     plugins/orchestration/commands/qa-check.md \
@@ -175,4 +188,25 @@ setup() {
     run diff "$src" <(head -n "$n" "$installed")
     [ "$status" -eq 0 ]
   done
+}
+
+@test "README documents reviewer.autoMerge instead of asserting human-merge as an invariant (#82)" {
+  readme="$REPO_ROOT/README.md"
+  # AC1: the opt-in exists in the README at all — it previously never appeared, so
+  # readers took human-merge for structurally impossible to bypass.
+  run grep -F 'reviewer.autoMerge' "$readme"
+  [ "$status" -eq 0 ]
+  # AC1 cont.: default, the branch-protection precondition, and the fail-closed behaviour.
+  run grep -F 'autoMerge: false' "$readme"
+  [ "$status" -eq 0 ]
+  run grep -F 'fail-closed' "$readme"
+  [ "$status" -eq 0 ]
+  # AC2: the absolute phrasings are gone from the *merge* claims...
+  for phrase in '머지는 항상 사람이' '머지/승인은 절대 안 함' '머지·승인하지 않습니다' '승인·머지를 하지 않음'; do
+    run grep -F "$phrase" "$readme"
+    [ "$status" -ne 0 ]
+  done
+  # ...while the approve invariant — true regardless of autoMerge — is kept.
+  run grep -F '승인(approve)' "$readme"
+  [ "$status" -eq 0 ]
 }

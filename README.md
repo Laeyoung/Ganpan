@@ -2,7 +2,7 @@
 
 **GitHub-native 멀티 에이전트 오케스트레이션 툴킷** — Issues / PRs / 라벨을 단일 상태 머신으로 삼아, 여러 AI 에이전트가 **Triager → Coder → Reviewer → QA** 레인을 나눠 협업하도록 만드는 Claude Code + Codex + Antigravity CLI 지원 툴킷입니다.
 
-별도의 큐나 DB 없이 GitHub 자체를 작업 보드로 사용합니다. 각 이슈는 `status:*` 라벨로 상태가 표현되고, 에이전트들은 라벨을 보고 자기 일을 집어가며, **머지는 항상 사람이** 합니다(branch protection으로 강제).
+별도의 큐나 DB 없이 GitHub 자체를 작업 보드로 사용합니다. 각 이슈는 `status:*` 라벨로 상태가 표현되고, 에이전트들은 라벨을 보고 자기 일을 집어가며, **에이전트는 PR을 승인(approve)하지 않습니다**. **머지는 기본적으로 사람이** 합니다 — 원한다면 `reviewer.autoMerge`(기본 `false`)로 Reviewer 자동 머지를 opt-in 할 수 있습니다([설정](#설정-ganpanorchestrationjson-또는-claudeorchestrationjson) 참고).
 
 ---
 
@@ -22,7 +22,7 @@ status:qa          ── /qa-check ──▶ status:done   (실패 시 rework /
 | **Triager** | `/ganpan:triage` | `ganpan-triage` | 고아 락 회수(reclaim) 후 `status:triage` 이슈를 분류 → `agent-ready` 또는 `blocked` |
 | **Coder** | `/ganpan:work-issue` | `ganpan-work-issue` | `agent-ready` 이슈를 클레임 → worktree에서 구현 → PR 생성 → `in-review` |
 | **Coder (deep)** | `/ganpan:work-issue-deep` | — | 더 크거나 위험한 이슈용. 같은 클레임/락 계약이되, 단일 "구현" 단계를 **Spec → 리뷰 → Plan → 리뷰 → 구현 → 리뷰** 루프로 대체 (Claude Code 전용) |
-| **Reviewer** | `/ganpan:review-queue` | `ganpan-review-queue` | `in-review` PR을 리뷰. **머지/승인은 절대 안 함** — 사람에게 머지 요청, 통과 시 `qa` |
+| **Reviewer** | `/ganpan:review-queue` | `ganpan-review-queue` | `in-review` PR을 리뷰. **승인(approve)은 절대 안 함**, 머지도 기본적으로 사람에게 요청 (`reviewer.autoMerge` opt-in 시에만 자동 머지), 통과 시 `qa` |
 | **Reviewer (deep)** | `/ganpan:review-queue-deep` | — | 각 `in-review` PR을 **멀티패스 에이전트팀**으로 리뷰한 뒤 표준 4-way 프로토콜로 라우팅 (Claude Code 전용) |
 | **QA** | `/ganpan:qa-check` | `ganpan-qa-check` | 머지된 작업을 실제 실행·검증. 통과 → `done`, 실패 → rework 또는 `blocked` |
 | **Setup** | `/ganpan:orch-setup` | `ganpan-setup` | 1회 셋업 (아래 참고) |
@@ -192,7 +192,7 @@ QA      :  /goal 로 /ganpan:qa-check 래핑
    ```
    허용 범위는 필요에 맞게 좁히세요. 특히 `gh api --method DELETE`처럼 **외부 시스템을 바꾸는** 호출은 안전 분류기가 기본적으로 더 강하게 게이팅하므로, 정말 필요할 때만 명시적으로 허용 규칙(`Bash(gh api --method DELETE:*)` 등)을 추가하세요.
 2. **편집 자동 수락.** 무인 루프에서는 편집 승인 모드(예: `acceptEdits`)를 켜 코드·문서 편집이 멈추지 않게 합니다.
-3. **안전장치는 그대로.** auto mode여도 **에이전트는 PR을 머지·승인하지 않습니다**(branch protection으로 강제). 또 각 레인은 시작 시 `gh` 행위 주체가 `config.bot`인지 확인하고 아니면 즉시 중단하므로, `GH_TOKEN`(봇 PAT)을 먼저 export 해야 합니다(위 "셋업 이후 사람이 해야 할 일" 참고).
+3. **안전장치는 그대로.** auto mode여도 **에이전트는 PR을 승인(approve)하지 않으며**, 머지도 기본값(`reviewer.autoMerge: false`)에서는 하지 않습니다 — 자동 머지는 명시적 opt-in이고, `main`의 branch protection을 직접 해제했을 때만 동작합니다(활성 게이트를 우회하지 않음). 또 각 레인은 시작 시 `gh` 행위 주체가 `config.bot`인지 확인하고 아니면 즉시 중단하므로, `GH_TOKEN`(봇 PAT)을 먼저 export 해야 합니다(위 "셋업 이후 사람이 해야 할 일" 참고).
 
 > `/loop`으로 표준 레인을 돌리면, 각 틱의 실제 작업은 **일회용 서브에이전트**에서 실행되고 메인 세션에는 한 줄 요약만 남습니다 — 반복 틱마다 컨텍스트가 무한히 쌓이는 것을 막기 위한 설계입니다(#66).
 
@@ -217,9 +217,22 @@ config discovery 순서:
   "reclaim": { "timeoutMinutes": 120, "heartbeatMinutes": 15 },
   "commands": { "test": null, "build": null, "lint": null },  // 자동 감지 보완용
   "worktreeBaseDir": "../",      // wt-issue-<n> 가 생성될 위치
-  "project": { "number": null, "statusField": "Status" }      // GitHub Project 연동(선택)
+  "project": { "number": null, "statusField": "Status" },     // GitHub Project 연동(선택)
+  "reviewer": {
+    "autoMerge": false,          // Reviewer 자동 머지 opt-in (기본 false = 사람이 머지)
+    "autoMergePrivatePlanWorkaround": false  // Free 플랜 private 레포 전용 (아래 참고)
+  }
 }
 ```
+
+### 머지 게이트와 `reviewer.autoMerge`
+
+에이전트가 PR을 **승인(approve)하지 않는다**는 것은 설정과 무관한 불변 조건입니다. **머지**는 옵션입니다:
+
+- **기본값 `autoMerge: false`** — Reviewer는 리뷰를 통과시킨 뒤 사람에게 머지를 요청하고 멈춥니다. `main`에 branch protection을 걸어두면 구조적으로도 강제됩니다.
+- **`autoMerge: true`로 opt-in** — Reviewer의 판정이 "proceed"이고 PR이 `OPEN` + mergeable + `mergeStateStatus == CLEAN`일 때 자동 머지합니다. 단, **`main`의 branch protection을 직접 해제했을 때만** 동작합니다 — 에이전트는 활성 게이트를 우회하지 않습니다. 플래그를 켜도 보호가 남아 있으면 머지하지 않고 PR 코멘트로 알립니다.
+- **fail-closed** — 보호 여부 확인이 불확실하면(5xx, 스코프 부족, 네트워크 오류 등) 머지하지 않습니다. 추측으로 진행하는 경로는 없습니다(#72).
+- **Free 플랜 + private 레포 주의** — branch protection API가 유료 기능이라 보호 여부와 무관하게 항상 `403`을 반환하므로 위 fail-closed에 영구히 걸립니다. 레포를 public으로 바꾸거나 Pro/Team으로 올리는 것이 정석이며, "Free private 레포는 애초에 branch protection을 걸 수 없다"는 점을 받아들인다면 `autoMergePrivatePlanWorkaround: true`로 그 **정확한** 403만 "보호 없음"으로 취급하도록 opt-in 할 수 있습니다(다른 모든 불확실한 응답은 여전히 fail-closed).
 
 ---
 
@@ -227,7 +240,7 @@ config discovery 순서:
 
 - **커밋:** Conventional Commits — `type(scope): subject` (`type` ∈ feat, fix, docs, refactor, test, chore, perf, build, ci). 본문은 *무엇을·왜*, 푸터는 자동 종료되지 않는 참조 `Refs #<n>` (QA가 최종 종료를 담당 — 자동 종료 키워드는 머지 시 이슈를 닫아 qa-check를 건너뜀).
 - **브랜치/worktree:** 이슈 1개 → 브랜치 `issue-<n>` → worktree `../wt-issue-<n>`. 남의 `wt-issue-*`를 force-push·삭제 금지.
-- **머지 게이트:** 에이전트는 PR 승인·머지를 하지 않음. 사람이 리뷰·머지(branch protection으로 강제).
+- **머지 게이트:** 에이전트는 PR을 **승인(approve)하지 않음** — 이것은 설정과 무관한 불변 조건. 머지는 기본적으로 사람이 하며(`reviewer.autoMerge: false`), branch protection으로 강제할 수 있음. `reviewer.autoMerge: true`로 opt-in 하면 Reviewer가 통과한 PR을 머지하지만, `main`의 branch protection이 해제되어 있어야만 하고 확인 실패 시 fail-closed.
 
 ---
 
@@ -254,7 +267,7 @@ tests/                                   # bats 테스트
 ## 알려진 잔여 위험
 
 - 봇 토큰이 Projects:write 보유 → 영향 범위가 넓음(라이브 보드 sync를 위한 트레이드오프).
-- 단일 봇 정체성 → self-approval은 토큰 분리가 아니라 branch protection으로만 차단됨.
+- 단일 봇 정체성 → 레인은 스스로 approve 하지 않지만, 이를 **구조적으로** 막는 것은 토큰 분리가 아니라 branch protection뿐임. `reviewer.autoMerge: true`로 opt-in 한 레포는 그 branch protection을 해제한 상태이므로, 이 방어선도 함께 사라진다는 점을 감수하는 트레이드오프.
 - Contents:write 봇은 `main` 이외 브랜치를 force-push·삭제할 수 있음.
 
 자세한 내용은 [`docs/SETUP.md`](docs/SETUP.md)를 참고하세요.

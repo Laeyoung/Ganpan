@@ -41,7 +41,7 @@ Ganpan ships five surfaces; a release must not break any of them.
 
 - [ ] Shipped `assets/CLAUDE.md`, `README.md`, and `docs/SETUP.md` reflect any user-facing change (assets/CLAUDE.md is deploy output, not dev rules).
 - [ ] A change record exists under `docs/log/YYYY-MM-DD-<slug>.md` capturing *what*, *why*, and *alternatives not chosen*.
-- [ ] Conventional-commit history on the branch is clean (`type(scope): subject`, `Closes #<n>`).
+- [ ] Conventional-commit history on the branch is clean (`type(scope): subject`, non-closing `Refs #<n>` footer — QA owns the terminal close, so an auto-closing keyword would close the issue on merge and skip `qa-check`).
 
 ## 5. Merge & post-merge verification
 
