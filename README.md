@@ -88,6 +88,8 @@ ganpan 체크아웃에서 대상 레포로 파일을 직접 복사합니다:
 
 **업그레이드:** `install.sh`를 다시 실행하면 버전 sentinel이 다른 파일만 갱신됩니다. v1(자동 sentinel 이전) 설치본에서 처음 올릴 때는 `./install.sh <대상> --force`를 쓰거나 기존 `scripts/orchestration/`·`.claude/commands/`를 먼저 지우세요.
 
+> **업그레이드 후 라벨을 다시 부트스트랩하세요.** 라벨은 셋업 시점에 **한 번만** 생성되므로, 새 라벨이 `labels.yml`에 추가돼도 기존 설치 저장소는 그것을 받지 못합니다 — 그리고 이 갭은 레인이 그 라벨을 붙이려다 실패할 때에야 드러납니다(#81). `scripts/orchestration/labels-check.sh`로 드리프트를 확인하고(읽기 전용), 누락이 있으면 `scripts/orchestration/bootstrap-labels.sh .github/labels.yml`을 다시 실행하세요 — `--force` create-or-update라 idempotent하고 삭제·이름변경을 하지 않습니다. `/ganpan:update`도 이 검사를 함께 보고합니다.
+
 ### 방법 C — Codex repo-local skills (Phase 1 MVP)
 
 Codex CLI/IDE가 대상 레포에서 repo-local skills를 읽도록 설치합니다:
