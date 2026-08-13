@@ -57,10 +57,11 @@ Do exactly this:
    - **Add the bot as a collaborator** on the repo.
    - **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, include administrators; the bot must **not** be an admin.
    - **(Optional) GitHub Project status sync:** to mirror issue status onto a Projects (v2) board, create the board (owned by the same org/user as the repo), ensure its Status single-select field has options named exactly `In Progress`, `In Review`, `QA`, `Done`, enable the board's auto-add workflow so issues become items, set `project.number` in the config, and verify with `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/project-check.sh`. Leave `project.number` null to keep sync off (but keep `project.statusField`).
-6. **Verify (optional).** Confirm labels exist and echo the lane-run commands:
+6. **Verify (optional).** Confirm every label defined in `labels.yml` actually exists on the repo, and echo the lane-run commands:
    ```bash
-   gh label list --repo "$(jq -r .repo "$CFG")" | grep -c '^status:' || true
+   ${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/labels-check.sh
    ```
+   It is read-only and names any missing label. On `DRIFT`, re-run `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/bootstrap-labels.sh .github/labels.yml` — it is idempotent (`--force` = create-or-update; it never deletes or renames), so running it on an already-set-up repo is a no-op. **Re-run it after any ganpan upgrade:** labels are bootstrapped once at setup, so a repo installed before a label was added never receives it, and the gap only surfaces when a lane's write fails mid-run.
    If a GitHub Project is configured, also run `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/project-check.sh` to confirm the board's status field has the required options.
    Then print: Triager `/loop 10m /triage` · Coder `/loop /work-issue` · Reviewer `/loop 5m /review-queue` · QA `/qa-check` (under `/goal`) — or run all four at once from one session with `/loop 20m /run-all` (the launcher; `20m` is an adjustable example).
 

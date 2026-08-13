@@ -61,7 +61,7 @@ if [ "${1:-}" = "api" ] && ! printf '%s' "$*" | grep -qE -- '(-X|--method)[= ](P
   exit "${GH_EXIT:-0}"
 fi
 case "${1:-} ${2:-}" in
-  "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list")
+  "issue list"|"issue view"|"pr view"|"pr list"|"project view"|"project field-list"|"project item-list"|"label list")
     idx_file="$GH_RESPONSES/.idx"
     n=$(( $(cat "$idx_file" 2>/dev/null || echo 0) + 1 ))
     echo "$n" > "$idx_file"

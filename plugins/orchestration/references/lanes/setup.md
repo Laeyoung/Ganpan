@@ -14,6 +14,11 @@ Run from the target repository root.
    ```bash
    scripts/orchestration/bootstrap-labels.sh .github/labels.yml
    ```
-6. Tell the human to create a bot account, provision a fine-grained GitHub token with required repo permissions, add the bot as collaborator, and enforce branch protection requiring human review.
+   This is idempotent (`gh label create --force` = create-or-update; it never deletes or renames), so it is safe to re-run. **Re-run it after every ganpan upgrade** — labels are bootstrapped only at setup, so a repo installed before a label was added never receives it, and the gap surfaces only when a lane's label write fails mid-run (#81).
+6. Verify the label set matches the definitions (read-only; exits 1 and names the missing labels on drift):
+   ```bash
+   scripts/orchestration/labels-check.sh
+   ```
+7. Tell the human to create a bot account, provision a fine-grained GitHub token with required repo permissions, add the bot as collaborator, and enforce branch protection requiring human review.
 
 Never create secrets, print token values, or change branch protection automatically.

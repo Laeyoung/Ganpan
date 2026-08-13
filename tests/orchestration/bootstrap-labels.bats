@@ -7,13 +7,26 @@ setup() {
   printf '{"repo":"o/r","bot":"b","candidateN":1,"wipLimit":1,"reclaim":{"timeoutMinutes":1,"heartbeatMinutes":1},"commands":{"test":null,"build":null,"lint":null},"worktreeBaseDir":"../","project":{"number":null,"statusField":"Status"}}' > "$ORCH_CONFIG"
   SCRIPT="$BATS_TEST_DIRNAME/../../plugins/orchestration/scripts/orchestration/bootstrap-labels.sh"
   LABELS="$BATS_TEST_DIRNAME/../../plugins/orchestration/assets/labels.yml"
+  # Derived from labels.yml, never hardcoded: a label added to the asset raises the
+  # expectation automatically. A frozen literal is the shape of bug that let
+  # status:needs-decision ship in the asset while no repo ever received it (#81).
+  N_LABELS=$(yq -r '.[].name' "$LABELS" | grep -c .)
 }
 
-@test "creates all 8 labels via gh label create" {
+@test "creates every label defined in labels.yml via gh label create" {
   run bash "$SCRIPT" "$LABELS"
   [ "$status" -eq 0 ]
   run grep -c '^label create' "$GH_CALLS"
-  [ "$output" -eq 8 ]
+  [ "$output" -eq "$N_LABELS" ]
+}
+
+@test "every label name in labels.yml is bootstrapped by name (#81)" {
+  # The count alone would still pass if one name were created twice and another skipped.
+  bash "$SCRIPT" "$LABELS"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    grep -qF "label create $name " "$GH_CALLS"
+  done < <(yq -r '.[].name' "$LABELS")
 }
 
 @test "passes name color and description for each label" {
@@ -25,7 +38,7 @@ setup() {
   bash "$SCRIPT" "$LABELS"
   # --force on every label create; without it a second bootstrap run would error on existing labels
   run grep -c 'label create .* --force' "$GH_CALLS"
-  [ "$output" -eq 8 ]
+  [ "$output" -eq "$N_LABELS" ]
 }
 
 @test "bootstrap-labels creates status:needs-decision" {
@@ -43,5 +56,5 @@ setup() {
   [ "$status" -eq 0 ]
   ! grep -q 'api user' "$GH_CALLS"          # never probes identity == never gated
   run grep -c '^label create' "$GH_CALLS"
-  [ "$output" -eq 8 ]
+  [ "$output" -eq "$N_LABELS" ]
 }
