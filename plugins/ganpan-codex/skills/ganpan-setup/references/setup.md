@@ -19,6 +19,11 @@ Run from the target repository root.
    ```bash
    scripts/orchestration/labels-check.sh
    ```
-7. Tell the human to create a bot account, provision a fine-grained GitHub token with required repo permissions, add the bot as collaborator, and enforce branch protection requiring human review.
+7. Surface the private-repo auto-merge advisory before printing the human checklist (read-only; exit 1 means the advisory applies, **not** that setup failed):
+   ```bash
+   scripts/orchestration/visibility-check.sh || true
+   ```
+   On a public repo it prints `OK`. On a private repo it prints an `ADVISORY`: under GitHub Free the branch-protection API always returns `403 "Upgrade to GitHub Pro or make this repository public…"`, so `auto-merge.sh` fails closed forever and passing PRs sit in `status:in-review` (#72). Relay its output verbatim — including the three fixes (make public / upgrade to Pro/Team / opt in with `reviewer.autoMergePrivatePlanWorkaround: true`). Never set that flag on the human's behalf; it is their explicit acceptance that a Free private repo cannot have branch protection.
+8. Tell the human to create a bot account, provision a fine-grained GitHub token with required repo permissions, add the bot as collaborator, and enforce branch protection requiring human review.
 
 Never create secrets, print token values, or change branch protection automatically.
