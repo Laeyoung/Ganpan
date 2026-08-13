@@ -113,7 +113,9 @@ setup() {
     plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
     plugins/orchestration/assets/CLAUDE.md \
     CLAUDE.md \
-    README.md ; do
+    README.md \
+    docs/RELEASE_CHECKLIST.md \
+    docs/RELEASE_PLAYBOOK.md ; do
     run grep -F 'Closes #' "$REPO_ROOT/$rel"
     [ "$status" -ne 0 ]
   done
@@ -122,10 +124,21 @@ setup() {
     plugins/orchestration/commands/work-issue.md \
     plugins/orchestration/commands/work-issue-deep.md \
     plugins/orchestration/references/lanes/work-issue.md \
-    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md ; do
+    plugins/ganpan-codex/skills/ganpan-work-issue/references/work-issue.md \
+    docs/RELEASE_CHECKLIST.md \
+    docs/RELEASE_PLAYBOOK.md ; do
     run grep -F 'Refs #' "$REPO_ROOT/$rel"
     [ "$status" -eq 0 ]
   done
+  # #78: the guard above lists files one by one, so a *new* doc could reintroduce the
+  # keyword unnoticed. Sweep all of docs/ except the historical records (docs/log,
+  # docs/superpowers), which quote the old convention as history and must not change.
+  hits=""
+  while IFS= read -r f; do
+    case "$f" in */docs/log/*|*/docs/superpowers/*) continue ;; esac
+    hits="$hits $f"
+  done < <(grep -rlF 'Closes #' "$REPO_ROOT/docs" --include='*.md' || true)
+  [ -z "$hits" ]
   # AC3: qa-check docs state the non-closing design (and drop the old inaccurate phrasing).
   for rel in \
     plugins/orchestration/commands/qa-check.md \
