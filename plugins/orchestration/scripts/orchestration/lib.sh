@@ -2,8 +2,13 @@
 # lib.sh — shared config + helpers. Source this; do not execute directly.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export SCRIPT_DIR
+# NOTE: do not reintroduce a `SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"` here (#86).
+# `BASH_SOURCE` does not exist in zsh, and line 3 arms `set -u` for the *sourcing* shell
+# regardless of the caller's own options, so an unguarded reference printed
+# "lib.sh: BASH_SOURCE[0]: parameter not set" to stderr on every lane start under a zsh
+# operator shell — noise that already caused one misdiagnosis. Every script computes its
+# own `DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` before sourcing this file, so
+# nothing here needs it. If a future helper does, guard it as `${BASH_SOURCE[0]:-$0}`.
 
 log() { printf '[%s] %s\n' "$1" "${*:2}" >&2; }
 
