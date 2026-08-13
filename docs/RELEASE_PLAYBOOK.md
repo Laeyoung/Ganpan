@@ -50,7 +50,9 @@ Add `docs/log/YYYY-MM-DD-<slug>.md` (what / why / alternatives-not-chosen) and
 update `README.md` / `docs/SETUP.md` / `assets/CLAUDE.md` if user-facing.
 
 ### 5. Open the PR and let the lanes run
-- Open the PR (`Closes #<n>`). The Reviewer lane may auto-merge only when its
+- Open the PR with a non-closing `Refs #<n>` reference — QA owns the terminal
+  close, so an auto-closing keyword would close the issue on merge and skip
+  `qa-check`. The Reviewer lane may auto-merge only when its
   verdict is "proceed" **and** the PR is OPEN + mergeable + `mergeStateStatus == CLEAN`
   (this repo sets `reviewer.autoMerge: true` and `main` has no branch
   protection). Agents never *approve*.
