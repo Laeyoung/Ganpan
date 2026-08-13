@@ -52,7 +52,11 @@ Do exactly this:
    "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/bootstrap-labels.sh" .github/labels.yml \
      || { echo "setup incomplete — label bootstrap failed; fix gh auth and re-run /orch-setup"; exit 1; }
    ```
-5. **Manual-steps checklist (print — do NOT attempt to automate).** Tell the human to:
+5. **Manual-steps checklist (print — do NOT attempt to automate).** First run the private-repo advisory so its output lands in the checklist, then tell the human the rest:
+   ```bash
+   "${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/visibility-check.sh" || true
+   ```
+   It is read-only. On a **public** repo it prints `OK` and there is nothing to do. On a **private** repo it prints an `ADVISORY` (exit 1 — do **not** treat that as setup failure, hence `|| true`): under GitHub **Free** the branch-protection API always returns `403 "Upgrade to GitHub Pro or make this repository public…"`, so `auto-merge.sh` fails closed forever and passing PRs sit in `in-review`. Relay its output verbatim, including the three fixes (make public / upgrade to Pro / opt in with `reviewer.autoMergePrivatePlanWorkaround: true`). Never flip that flag for the human — it is their explicit acceptance that a Free private repo cannot have branch protection.
    - Create a **bot account + fine-grained PAT** scoped to the target repo: Contents RW, Pull requests RW, Issues RW, Projects RW; export `GH_TOKEN=github_pat_...` (HTTPS, not ssh). **This is a runtime precondition, not a recommendation** — every lane verifies `gh` is acting as `config.bot` at startup and hard-stops on mismatch.
    - **Add the bot as a collaborator** on the repo.
    - **Branch protection on `main`:** require 1 human review (or CODEOWNERS), no force-push, include administrators; the bot must **not** be an admin.

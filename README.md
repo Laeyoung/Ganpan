@@ -233,6 +233,7 @@ config discovery 순서:
 - **`autoMerge: true`로 opt-in** — Reviewer의 판정이 "proceed"이고 PR이 `OPEN` + mergeable + `mergeStateStatus == CLEAN`일 때 자동 머지합니다. 단, **`main`의 branch protection을 직접 해제했을 때만** 동작합니다 — 에이전트는 활성 게이트를 우회하지 않습니다. 플래그를 켜도 보호가 남아 있으면 머지하지 않고 PR 코멘트로 알립니다.
 - **fail-closed** — 보호 여부 확인이 불확실하면(5xx, 스코프 부족, 네트워크 오류 등) 머지하지 않습니다. 추측으로 진행하는 경로는 없습니다(#72).
 - **Free 플랜 + private 레포 주의** — branch protection API가 유료 기능이라 보호 여부와 무관하게 항상 `403`을 반환하므로 위 fail-closed에 영구히 걸립니다. 레포를 public으로 바꾸거나 Pro/Team으로 올리는 것이 정석이며, "Free private 레포는 애초에 branch protection을 걸 수 없다"는 점을 받아들인다면 `autoMergePrivatePlanWorkaround: true`로 그 **정확한** 403만 "보호 없음"으로 취급하도록 opt-in 할 수 있습니다(다른 모든 불확실한 응답은 여전히 fail-closed).
+- **셋업 시점 사전 안내(#80)** — `/ganpan:orch-setup`은 체크리스트를 출력하기 전에 `scripts/orchestration/visibility-check.sh`를 실행합니다(읽기 전용, 언제든 직접 실행 가능). 레포가 private이면 위 함정과 세 가지 해법을 미리 출력하므로, 자동 머지를 켠 뒤 PR이 `in-review`에 영원히 멈춘 다음에야 원인을 찾는 상황을 막습니다. 플랜 자동 감지는 하지 않습니다 — owner plan 필드가 fine-grained 토큰에 신뢰성 있게 노출되지 않기 때문에 visibility만 보고 안내하며, 유료 플랜의 private 레포라면 이 안내를 무시하고 플래그를 `false`로 두면 됩니다. 이 스크립트는 `auto-merge.sh`의 fail-closed 동작을 전혀 바꾸지 않습니다.
 
 ---
 
