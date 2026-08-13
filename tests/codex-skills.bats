@@ -176,3 +176,24 @@ setup() {
     [ "$status" -eq 0 ]
   done
 }
+
+@test "README documents reviewer.autoMerge instead of asserting human-merge as an invariant (#82)" {
+  readme="$REPO_ROOT/README.md"
+  # AC1: the opt-in exists in the README at all — it previously never appeared, so
+  # readers took human-merge for structurally impossible to bypass.
+  run grep -F 'reviewer.autoMerge' "$readme"
+  [ "$status" -eq 0 ]
+  # AC1 cont.: default, the branch-protection precondition, and the fail-closed behaviour.
+  run grep -F 'autoMerge: false' "$readme"
+  [ "$status" -eq 0 ]
+  run grep -F 'fail-closed' "$readme"
+  [ "$status" -eq 0 ]
+  # AC2: the absolute phrasings are gone from the *merge* claims...
+  for phrase in '머지는 항상 사람이' '머지/승인은 절대 안 함' '머지·승인하지 않습니다' '승인·머지를 하지 않음'; do
+    run grep -F "$phrase" "$readme"
+    [ "$status" -ne 0 ]
+  done
+  # ...while the approve invariant — true regardless of autoMerge — is kept.
+  run grep -F '승인(approve)' "$readme"
+  [ "$status" -eq 0 ]
+}
