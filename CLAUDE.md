@@ -26,6 +26,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 - `assets/CLAUDE.md` is shipped to users — editing it changes deploy output, not this repo's dev rules.
 - **Keep engine-script stdout clean for the return value.** Any script whose stdout is captured via `$(…)` (e.g. `ISSUE=$(claim.sh)`, `AM=$(auto-merge.sh)`, `case "$(unblock-check.sh)"`) must emit **only** its return token on stdout. Mutating `gh` writes (`gh issue edit|comment|create`, `gh pr create|merge`, `gh label create`, `gh project item-edit`, `gh api --method POST|PUT|PATCH|DELETE`) print the resource URL/confirmation to stdout on success even non-interactively — send that to `/dev/null` (`>/dev/null`, keeping stderr open for `|| log WARN`) or capture it into a local (`out=$(gh … 2>&1)`); send any diagnostics through `log` (stderr), never bare `echo`. A leaked URL corrupts the captured value (the PR #28 / #29 bug class). This holds even for scripts not currently captured (e.g. `reclaim.sh`, `project_sync` in `lib.sh`) so the contract can't rot if a caller later wraps them in `$(…)`. Exception: `bootstrap-labels.sh` deliberately prints per-label progress to stdout — that is human-facing setup output, not a captured return value. Regression-guard new captured + mutating scripts with the `GH_EMIT_WRITE_URL` stub pattern (`tests/orchestration/helpers/gh-stub.sh`), asserting the leaked `STUB-URL` never reaches the script's stdout.
 
+<!-- orchestration-conventions -->
 # Repo conventions
 
 ## Commits (Conventional Commits — required)
@@ -51,23 +52,6 @@ Format: `type(scope): subject`
 - **New features / non-trivial changes:** use the Superpowers plugin and proceed **Spec → Plan → implementation** — write the spec under `docs/superpowers/specs/`, the plan under `docs/superpowers/plans/`, then implement against the plan.
 - **Record every shipped change** in `docs/log/` — one Markdown file per change (`docs/log/YYYY-MM-DD-<slug>.md`). Capture not just *what* changed but the **key decisions made** and the **alternatives considered but not chosen** (and why). See `docs/log/README.md` for the template.
 
-<!-- orchestration-conventions -->
-# Repo conventions
-
-## Commits (Conventional Commits — required)
-Format: `type(scope): subject`
-- `type` ∈ feat, fix, docs, refactor, test, chore, perf, build, ci.
-- Body explains **what changed and why** (not "수정했습니다").
-- Footer references the issue with a non-closing reference: `Refs #<n>` (QA owns the terminal close — an auto-closing keyword would close the issue on merge and skip qa-check).
-
-## Branches / worktrees
-- One issue → branch `issue-<n>` → worktree `../wt-issue-<n>`.
-- Never force-push or delete another worker's `wt-issue-*` branch.
-
-## Merge gate
-- This repo opts **into** reviewer auto-merge: `.ganpan/orchestration.json` sets `reviewer.autoMerge: true`, and `main` has no branch protection or rulesets, so the Reviewer lane may merge a PR once its verdict is "proceed" and the PR is OPEN + mergeable + `mergeStateStatus == CLEAN`. Agents still never *approve* PRs, and `auto-merge.sh` fails closed on any inconclusive protection probe.
-- Re-enabling the human merge gate means either flipping `reviewer.autoMerge` back to `false` or adding branch protection on `main` (`auto-merge.sh` will then return `protected` and request a human merge).
-
 ## Bot identity
 - Lanes verify `gh` is acting as `config.bot` before any write and **hard-stop** otherwise. Export the bot's fine-grained PAT first: `export GH_TOKEN=github_pat_...` (HTTPS). If a lane stops with "gh is acting as '<you>' but config.bot is '<bot>'", your `GH_TOKEN` is unset or wrong.
 - `ORCH_SKIP_ACTOR_CHECK=1` bypasses the check — use it **per-invocation only** (e.g. CI where the bot PAT is the actor), never as a global export.
@@ -75,4 +59,4 @@ Format: `type(scope): subject`
 ## Reviewer lane — decision gate
 - The Reviewer reads **trusted** human PR/issue comments (write+ permission or reviewer allowlist) and routes each in-review PR to rework / a human-decision gate (`status:needs-decision`) / an out-of-scope follow-up issue / a human merge request.
 - Only bot-authored markers (`decision-requested:`/`decision-resolved:`/`decision-clarify:`/`followup-created:`/`cap-exceeded:`/`merge-requested:`) change lane state. Human text never does.
-- Trust/cap policy lives in `.claude/orchestration.json` under `reviewer` (`permissionThreshold`, `allowlist`, `followupIssueCapPerPR`).
+- Trust/cap policy lives in `.ganpan/orchestration.json` under `reviewer` (`permissionThreshold`, `allowlist`, `followupIssueCapPerPR`).
