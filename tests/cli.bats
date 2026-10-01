@@ -203,3 +203,112 @@ fill_config() {
   run node "$CLI" validate --strict
   [ "$status" -eq 2 ]
 }
+
+@test "init: installs the codex payload by default" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  run node "$CLI" init "$T"
+  [ "$status" -eq 0 ]
+  [ -f "$T/scripts/orchestration/lib.sh" ]
+  [ -f "$T/.ganpan/orchestration.json" ]
+  [ -f "$T/.agents/skills/ganpan-setup/SKILL.md" ]
+  [ -f "$T/AGENTS.md" ]
+  [ ! -d "$T/.claude/commands" ]          # codex, not claude
+}
+
+@test "init: --target claude is forwarded" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  run node "$CLI" init "$T" --target claude
+  [ "$status" -eq 0 ]
+  [ -f "$T/.claude/commands/work-issue.md" ]
+  [ ! -d "$T/.agents" ]
+}
+
+@test "init: then validate fails on placeholders until filled" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  node "$CLI" init "$T" >/dev/null
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  fill_config "$T"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+}
+
+@test "init: relative dir from another cwd installs into that dir" {
+  mkdir -p "$BATS_TEST_TMPDIR/work/t/.git"
+  cd "$BATS_TEST_TMPDIR/work"
+  run node "$CLI" init t
+  [ "$status" -eq 0 ]
+  [ -f "$BATS_TEST_TMPDIR/work/t/scripts/orchestration/lib.sh" ]
+  [ ! -d "$BATS_TEST_TMPDIR/work/scripts" ]
+}
+
+@test "init: dir with spaces works (Review Focus 1)" {
+  T="$BATS_TEST_TMPDIR/my repo"; mkdir -p "$T/.git"
+  run node "$CLI" init "$T"
+  [ "$status" -eq 0 ]
+  [ -f "$T/scripts/orchestration/lib.sh" ]
+}
+
+@test "init: nonexistent dir -> exit 1, no stack trace (Review Focus 2)" {
+  run node "$CLI" init "$BATS_TEST_TMPDIR/nope"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"target is not a directory"* ]]
+  [[ "$output" != *"    at "* ]]
+}
+
+@test "init: refuses a ganpan checkout, writes nothing" {
+  T="$BATS_TEST_TMPDIR/ganpan-clone"
+  mkdir -p "$T/.git" "$T/plugins/orchestration/.claude-plugin"
+  echo '{"version":"0.0.0"}' > "$T/plugins/orchestration/.claude-plugin/plugin.json"
+  run node "$CLI" init "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is a ganpan checkout"* ]]
+  [ ! -d "$T/scripts" ]
+  [ ! -d "$T/.ganpan" ]
+}
+
+@test "init: jq missing from PATH -> actionable error, nothing written" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"; mkdir -p "$FAKEBIN"
+  ln -s "$(command -v node)" "$FAKEBIN/node"
+  ln -s "$(command -v bash)" "$FAKEBIN/bash"
+  run env PATH="$FAKEBIN" "$FAKEBIN/node" "$CLI" init "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"jq is required but not found on PATH"* ]]
+  [ ! -d "$T/scripts" ]
+}
+
+@test "init: bash missing from PATH -> actionable error" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"; mkdir -p "$FAKEBIN"
+  ln -s "$(command -v node)" "$FAKEBIN/node"
+  ln -s "$(command -v jq)" "$FAKEBIN/jq"
+  run env PATH="$FAKEBIN" "$FAKEBIN/node" "$CLI" init "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bash is required but not found on PATH"* ]]
+}
+
+@test "init: bad or missing --target value -> exit 2, nothing written (Review Focus 3)" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  run node "$CLI" init "$T" --target nope
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--target must be one of: claude, codex, antigravity, both, all"* ]]
+  run node "$CLI" init "$T" --target
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--target requires a value"* ]]
+  run node "$CLI" init "$T" --bogus
+  [ "$status" -eq 2 ]
+  run node "$CLI" init "$T" extra-arg
+  [ "$status" -eq 2 ]
+  [ ! -d "$T/scripts" ]
+}
+
+@test "init: --force re-stamps drifted engine files" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  lib="$T/scripts/orchestration/lib.sh"
+  sed "s/ganpan-orchestration: v[0-9.]*/ganpan-orchestration: v0.0.1/" "$lib" > "$lib.tmp" && mv "$lib.tmp" "$lib"
+  run node "$CLI" init "$T" --force
+  [ "$status" -eq 0 ]
+  run grep -c "ganpan-orchestration: v$PLUGIN_VERSION" "$lib"
+  [ "$output" = "1" ]
+}

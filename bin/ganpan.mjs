@@ -114,10 +114,74 @@ function cmdValidate(args) {
   return failed ? 1 : 0;
 }
 
+const TARGETS = ['claude', 'codex', 'antigravity', 'both', 'all'];
+
+// onPath — is an executable named `cmd` on PATH? (Windows: also try cmd.exe.)
+function onPath(cmd) {
+  const names = process.platform === 'win32' ? [cmd, `${cmd}.exe`] : [cmd];
+  for (const d of (process.env.PATH || '').split(delimiter)) {
+    if (!d) continue;
+    for (const n of names) {
+      try {
+        accessSync(join(d, n), constants.X_OK);
+        return true;
+      } catch {
+        // not here — keep looking
+      }
+    }
+  }
+  return false;
+}
+
+function parseInit(args) {
+  const opts = { dir: '.', target: 'codex', force: false };
+  let dirSet = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--force') opts.force = true;
+    else if (a === '--target') {
+      if (i + 1 >= args.length) throw new UsageError('--target requires a value');
+      opts.target = args[++i];
+    } else if (a.startsWith('--target=')) opts.target = a.slice('--target='.length);
+    else if (a.startsWith('-')) throw new UsageError(`unknown flag: ${a}`);
+    else if (!dirSet) {
+      opts.dir = a;
+      dirSet = true;
+    } else throw new UsageError(`unexpected arg: ${a}`);
+  }
+  if (!TARGETS.includes(opts.target)) throw new UsageError(`--target must be one of: ${TARGETS.join(', ')}`);
+  return opts;
+}
+
+function cmdInit(args) {
+  const { dir, target, force } = parseInit(args);
+  const abs = resolve(dir);
+
+  for (const tool of ['bash', 'jq']) {
+    if (!onPath(tool)) {
+      const hint = process.platform === 'win32' ? ' — on Windows run ganpan from Git Bash or WSL' : '';
+      return fail(`${tool} is required but not found on PATH${hint}`);
+    }
+  }
+  if (!existsSync(abs) || !statSync(abs).isDirectory()) return fail(`target is not a directory: ${abs}`);
+  // install.sh's own TARGET == SRC guard can't catch this under npx: SRC is the npx cache.
+  if (existsSync(join(abs, 'plugins/orchestration/.claude-plugin/plugin.json'))) {
+    return fail(`${abs} is a ganpan checkout — run init in the repository you want to orchestrate`);
+  }
+
+  const argv = [INSTALL_SH, abs, '--target', target];
+  if (force) argv.push('--force');
+  const r = spawnSync('bash', argv, { stdio: 'inherit' });
+  if (r.error) return fail(`could not run install.sh: ${r.error.message}`);
+  return r.status ?? 1;
+}
+
 function main(argv) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
+      case 'init':
+        return cmdInit(rest);
       case 'validate':
         return cmdValidate(rest);
       case '-v':
