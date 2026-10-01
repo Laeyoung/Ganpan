@@ -33,10 +33,93 @@ function fail(msg) {
   return 1;
 }
 
+// Template placeholders shipped in plugins/orchestration/assets/orchestration.json.
+const PLACEHOLDERS = { repo: 'owner/repo', bot: 'bot-login' };
+
+// checkConfig — mirror lib.sh resolve_config_path order ($ORCH_CONFIG → .ganpan → .claude),
+// but pin the root to `root`: a relative $ORCH_CONFIG is resolved against the target
+// repo, because lanes always run from the repo root. No fallback when $ORCH_CONFIG is
+// set but missing — the engine doesn't fall back either.
+function checkConfig(root, report) {
+  const fromEnv = process.env.ORCH_CONFIG;
+  let rel;
+  if (fromEnv) rel = fromEnv;
+  else if (existsSync(join(root, '.ganpan/orchestration.json'))) rel = '.ganpan/orchestration.json';
+  else if (existsSync(join(root, '.claude/orchestration.json'))) rel = '.claude/orchestration.json';
+  else return report('FAIL', 'config missing: .ganpan/orchestration.json (or legacy .claude/orchestration.json) — run `ganpan init`');
+
+  const path = isAbsolute(rel) ? rel : join(root, rel);
+  if (!existsSync(path)) return report('FAIL', `config not found: ${path}${fromEnv ? ' (from $ORCH_CONFIG)' : ''}`);
+
+  let cfg;
+  try {
+    cfg = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (e) {
+    return report('FAIL', `config is not valid JSON: ${path} (${e.message})`);
+  }
+  if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) {
+    return report('FAIL', `config must be a JSON object: ${path}`);
+  }
+
+  let ok = true;
+  for (const key of ['repo', 'bot']) {
+    const v = cfg[key];
+    if (typeof v !== 'string' || v.trim() === '') {
+      report('FAIL', `config.${key} must be a non-empty string (${path})`);
+      ok = false;
+    } else if (v === PLACEHOLDERS[key]) {
+      report('FAIL', `config.${key} is still the template placeholder "${v}" — set it in ${path}`);
+      ok = false;
+    }
+  }
+  if (ok && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(cfg.repo)) {
+    report('FAIL', `config.repo "${cfg.repo}" must look like owner/name (${path})`);
+    ok = false;
+  }
+  if (ok) report('ok', `config ${path} (repo ${cfg.repo}, bot ${cfg.bot})`);
+}
+
+function cmdValidate(args) {
+  if (args.length > 1) throw new UsageError(`unexpected arg: ${args[1]}`);
+  if (args[0]?.startsWith('-')) throw new UsageError(`unknown flag: ${args[0]}`);
+  const root = resolve(args[0] ?? '.');
+  let failed = false;
+  const report = (level, msg) => {
+    if (level === 'FAIL') failed = true;
+    console.log(`${level.padEnd(4)} ${msg}`);
+  };
+
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    report('FAIL', `directory not found: ${root}`);
+    return 1;
+  }
+  report('ok', `directory ${root}`);
+
+  checkConfig(root, report);
+
+  const lib = join(root, 'scripts/orchestration/lib.sh');
+  if (!existsSync(lib)) {
+    report('FAIL', 'engine missing: scripts/orchestration/lib.sh — run `ganpan init`');
+  } else {
+    const m = readFileSync(lib, 'utf8').match(/ganpan-orchestration: v(\d+\.\d+\.\d+)/);
+    const cli = version();
+    if (!m) report('warn', 'engine lib.sh has no ganpan-orchestration sentinel — `ganpan init --force` re-stamps it');
+    else if (m[1] !== cli) report('warn', `engine v${m[1]} differs from ganpan v${cli} — update with \`ganpan init --force\``);
+    else report('ok', `engine version v${m[1]}`);
+  }
+
+  if (existsSync(join(root, '.github/labels.yml'))) report('ok', 'labels .github/labels.yml');
+  else report('FAIL', 'labels missing: .github/labels.yml — run `ganpan init`');
+
+  return failed ? 1 : 0;
+}
+
 function main(argv) {
   const [cmd, ...rest] = argv;
   try {
     switch (cmd) {
+      case 'validate':
+        return cmdValidate(rest);
       case '-v':
       case '--version':
         console.log(version());

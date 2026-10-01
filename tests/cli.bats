@@ -61,3 +61,145 @@ setup() {
   run bash -c "grep -E \"^import \" '$CLI' | grep -v \"from 'node:\""
   [ -z "$output" ]
 }
+
+# install_fresh <dir> — engine + codex payload into <dir> via install.sh (fixture for validate).
+install_fresh() {
+  mkdir -p "$1/.git"
+  bash "$REPO_ROOT/install.sh" "$1" --target codex >/dev/null
+}
+
+# fill_config <dir> — replace the template placeholders with real-looking values.
+fill_config() {
+  local cfg="$1/.ganpan/orchestration.json"
+  jq '.repo = "acme/widgets" | .bot = "acme-bot"' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+}
+
+@test "validate: fresh install fails on template placeholders" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'FAIL config.repo is still the template placeholder "owner/repo"'* ]]
+  [[ "$output" == *'FAIL config.bot is still the template placeholder "bot-login"'* ]]
+}
+
+@test "validate: filled-in install passes" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok   config"*"repo acme/widgets"* ]]
+  [[ "$output" == *"ok   engine version v$PLUGIN_VERSION"* ]]
+  [[ "$output" == *"ok   labels .github/labels.yml"* ]]
+  [[ "$output" != *"FAIL"* ]]
+}
+
+@test "validate: defaults to the current directory" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  cd "$T"
+  run node "$CLI" validate
+  [ "$status" -eq 0 ]
+}
+
+@test "validate: repo/bot null or non-string, or repo not owner/name -> FAIL" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  cfg="$T/.ganpan/orchestration.json"
+  jq '.repo = null | .bot = 5' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL config.repo must be a non-empty string"* ]]
+  [[ "$output" == *"FAIL config.bot must be a non-empty string"* ]]
+  jq '.repo = "just-a-name" | .bot = "b"' "$cfg" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'FAIL config.repo "just-a-name" must look like owner/name'* ]]
+}
+
+@test "validate: config that is JSON null or an array -> FAIL, not a crash (Review Focus 4)" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  for body in 'null' '[]'; do
+    printf '%s\n' "$body" > "$T/.ganpan/orchestration.json"
+    run node "$CLI" validate "$T"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"FAIL config must be a JSON object"* ]]
+    [[ "$output" != *"TypeError"* ]]
+  done
+}
+
+@test "validate: invalid JSON -> FAIL" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  printf '{ not json' > "$T/.ganpan/orchestration.json"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL config is not valid JSON"* ]]
+}
+
+@test "validate: missing dir -> exit 1" {
+  run node "$CLI" validate "$BATS_TEST_TMPDIR/nope"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL directory not found"* ]]
+}
+
+@test "validate: dir without engine or config -> exit 1 naming both" {
+  T="$BATS_TEST_TMPDIR/empty"; mkdir -p "$T"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL config missing"* ]]
+  [[ "$output" == *"FAIL engine missing: scripts/orchestration/lib.sh"* ]]
+}
+
+@test "validate: missing .github/labels.yml -> FAIL naming it" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  rm "$T/.github/labels.yml"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL labels missing: .github/labels.yml"* ]]
+}
+
+@test "validate: engine version drift is a warn, still exit 0" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  lib="$T/scripts/orchestration/lib.sh"
+  sed "s/ganpan-orchestration: v[0-9.]*/ganpan-orchestration: v0.0.1/" "$lib" > "$lib.tmp" && mv "$lib.tmp" "$lib"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warn engine v0.0.1 differs from ganpan v$PLUGIN_VERSION"* ]]
+}
+
+@test "validate: legacy .claude/orchestration.json is used when .ganpan is absent" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  mkdir -p "$T/.claude"; mv "$T/.ganpan/orchestration.json" "$T/.claude/orchestration.json"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ok   config $T/.claude/orchestration.json"* ]]
+}
+
+@test "validate: absolute ORCH_CONFIG wins over .ganpan" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"          # .ganpan config keeps placeholders
+  jq '.repo = "acme/alt" | .bot = "alt-bot"' "$T/.ganpan/orchestration.json" > "$BATS_TEST_TMPDIR/alt.json"
+  run env ORCH_CONFIG="$BATS_TEST_TMPDIR/alt.json" node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"repo acme/alt"* ]]
+}
+
+@test "validate: relative ORCH_CONFIG resolves against dir, not cwd" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"          # .ganpan config keeps placeholders
+  mkdir -p "$T/custom"
+  jq '.repo = "acme/rel" | .bot = "rel-bot"' "$T/.ganpan/orchestration.json" > "$T/custom/cfg.json"
+  cd "$BATS_TEST_TMPDIR"                                # cwd != dir, and has no custom/cfg.json
+  run env ORCH_CONFIG=custom/cfg.json node "$CLI" validate t
+  [ "$status" -eq 0 ]
+  real_t="$(cd "$T" && pwd -P)"                         # node's cwd is the physical path (macOS /private/var)
+  [[ "$output" == *"ok   config $real_t/custom/cfg.json"* ]]
+}
+
+@test "validate: ORCH_CONFIG pointing at a missing file -> FAIL, no fallback (Review Focus 5)" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"   # a valid .ganpan config exists
+  run env ORCH_CONFIG="$BATS_TEST_TMPDIR/missing.json" node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL config not found: $BATS_TEST_TMPDIR/missing.json (from \$ORCH_CONFIG)"* ]]
+}
+
+@test "validate: rejects extra args and flags with exit 2" {
+  run node "$CLI" validate a b
+  [ "$status" -eq 2 ]
+  run node "$CLI" validate --strict
+  [ "$status" -eq 2 ]
+}
