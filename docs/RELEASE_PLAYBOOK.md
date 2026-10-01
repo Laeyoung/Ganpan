@@ -5,8 +5,9 @@ How a change reaches installed users, step by step. Pair this with
 
 ## The release model (read this first)
 
-Ganpan has **no separate release artifact**. There are no git tags, no GitHub
-Releases, and no build step. The release *is* the merge to `main`:
+Ganpan has **no build step and no GitHub Release**. The release *is* the merge to
+`main`; afterwards a `vX.Y.Z` git tag (§6a) gives the `npx` engine bootstrap an
+immutable ref — the tag is additive and never changes what plugin users receive:
 
 ```
 feature branch ──(bump plugin.json version)──▶ PR ──(human merge)──▶ main
@@ -36,12 +37,14 @@ Edit `plugins/orchestration/.claude-plugin/plugin.json`:
 - `fix` → patch, `feat` → minor, breaking → major.
 - Never touch engine-internal names or the `ganpan-orchestration` sentinel
   unless the runtime contract is intentionally changing.
+- Also set `package.json` `version` and every `github:Laeyoung/Ganpan#vX.Y.Z` pin in
+  `plugins/ganpan-codex/skills/ganpan-setup/SKILL.md` to the same value (tests enforce equality).
 
 ### 3. Run the quality gates locally
 ```bash
 bats tests/*.bats tests/orchestration/*.bats
-shellcheck plugins/orchestration/scripts/orchestration/*.sh
-jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json
+shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
+jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json
 ```
 All three must be clean. These are the same gates in the checklist §1.
 
@@ -69,6 +72,17 @@ gh api "repos/Laeyoung/Ganpan/contents/plugins/orchestration/.claude-plugin/plug
 The value returned is exactly what installed users' `version-check.sh` will
 report as "latest."
 
+### 6a. Tag the release (Skills CLI bootstrap)
+From an up-to-date `main` checkout of `Laeyoung/Ganpan`:
+```bash
+scripts/release.sh --dry-run X.Y.Z   # all guards, no changes
+scripts/release.sh X.Y.Z             # git tag -a vX.Y.Z + git push origin vX.Y.Z
+```
+Do this right after the merge: until the tag exists, the new version's
+`ganpan-setup` bootstrap (`npx -y github:Laeyoung/Ganpan#vX.Y.Z init`) fails
+with "tag not found" (skills installed from the previous version keep working).
+If the push fails, the script prints `git tag -d vX.Y.Z` to remove the local tag.
+
 ### 7. Verify the release reached users
 - Fresh checkout / scratch repo: `/plugin` → update `ganpan@laeyoung`; confirm
   the new version resolves and commands namespace as `/ganpan:*`.
@@ -78,11 +92,12 @@ report as "latest."
 
 ## Rollback
 
-There is no tag to revert to; roll back the same way you shipped:
+Tags are never moved or deleted; roll back the same way you shipped — a rollback is a *new* version (and a new tag):
 1. `git revert` the offending merge commit on `main` (or a fast follow-up fix).
 2. **Bump the version again** in the revert/fix PR — a rollback that keeps the
    same `version` will not propagate to clients whose cache already keys on it.
 3. Merge, then re-run step 7 to confirm clients pick up the corrected version.
+4. Run `scripts/release.sh` for the new version.
 
 ## Surfaces to keep in sync
 
@@ -93,6 +108,7 @@ There is no tag to revert to; roll back the same way you shipped:
 | Copy-in Codex | `./install.sh <target> --target codex` | `tests/codex-skills.bats` |
 | Copy-in Antigravity | `./install.sh <target> --target antigravity` | `tests/antigravity.bats` |
 | Config discovery | `$ORCH_CONFIG` → `.ganpan/` → `.claude/` (legacy) | `tests/orchestration/lib.bats` |
+| Skills CLI (`npx skills add Laeyoung/Ganpan`) | recursive discovery of `plugins/ganpan-codex/skills/` + pinned `npx … #vX.Y.Z init` | `tests/codex-skills.bats`, `tests/cli.bats`, `tests/release.bats` |
 
 ## Current release readiness
 
