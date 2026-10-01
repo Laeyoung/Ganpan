@@ -7,6 +7,8 @@ description: Triage Ganpan issues by reclaiming orphaned locks, classifying stat
 
 Use this skill from the target repository root.
 
+**Preflight:** If `scripts/orchestration/lib.sh` is missing, stop — the Ganpan engine is not installed in this repository. Tell the user to run the `ganpan-setup` skill first; a lane never installs the engine itself.
+
 1. Read `references/triage.md`.
 2. Capture `REPO_ROOT="$PWD"`.
 3. Resolve config with the shared engine:

@@ -16,5 +16,6 @@ docs/qa/*.state.json
 # dogfoods ganpan on its own issues, GitHub renders the issue template only from
 # the default branch, and the committed labels.yml documents the repo's label set.
 /.claude/commands/
-/scripts/
+/scripts/*
+!/scripts/release.sh
 /references/

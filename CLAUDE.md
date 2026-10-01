@@ -6,9 +6,9 @@ Commands namespace as `/ganpan:*`. Single source of truth lives under
 
 ## Development
 ```bash
-bats tests/*.bats tests/orchestration/*.bats   # full test suite (includes codex-skills.bats, antigravity.bats)
-shellcheck plugins/orchestration/scripts/orchestration/*.sh
-jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json  # validate manifests
+bats tests/*.bats tests/orchestration/*.bats   # full test suite (includes codex-skills.bats, antigravity.bats, cli.bats, release.bats)
+shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
+jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json  # validate manifests
 ```
 
 ## Layout
@@ -18,12 +18,15 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 - `plugins/orchestration/assets/` — files copied into target repos (config template, labels, issue template, CLAUDE.md).
 - `plugins/ganpan-codex/skills/` — Codex repo-local skill source (`ganpan-*`), installed to `.agents/skills/`.
 - `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`; `--target claude|codex|antigravity|both|all`).
+- `bin/ganpan.mjs` + `package.json` — zero-dependency Node CLI (`init` delegates to `install.sh`, `validate` is an offline check), run as `npx -y github:Laeyoung/Ganpan#vX.Y.Z <cmd>`; `ganpan-setup` uses it to bootstrap the engine after `npx skills add Laeyoung/Ganpan`.
+- `scripts/release.sh` — guarded `vX.Y.Z` tagger run after a version-bump merge (the pinned npx bootstrap resolves the tag).
 
 ## Gotchas
 - **Never rename engine internals** (`scripts/orchestration/`, the `orchestration.json` config filename, the `ganpan-orchestration` version sentinel) — they are the deployed runtime contract, decoupled from the plugin name.
 - Lane commands call scripts via `${CLAUDE_PLUGIN_ROOT}/scripts/orchestration/…`; config discovery (via `resolve_config_path`) is **cwd-relative** in this order: `$ORCH_CONFIG` → `./.ganpan/orchestration.json` → `./.claude/orchestration.json` (legacy fallback). `load_config` exports the resolved path as `ORCH_CONFIG_PATH`.
 - Inside a worktree there is no config dir, so capture `REPO_ROOT="$PWD"` before any `cd`, resolve once with `CFG="$(resolve_config_path "$REPO_ROOT")"`, and pass `ORCH_CONFIG="$CFG"` to any script that calls `load_config`.
 - `assets/CLAUDE.md` is shipped to users — editing it changes deploy output, not this repo's dev rules.
+- **`npx skills` discovery relies on the recursive fallback** over `plugins/ganpan-codex/skills/`. Never add a root `SKILL.md` or a tracked root `skills/`, `.agents/skills/`, `.claude/skills/` — a shallower `SKILL.md` shadows the six real skills (`tests/codex-skills.bats` guards this).
 - **Keep engine-script stdout clean for the return value.** Any script whose stdout is captured via `$(…)` (e.g. `ISSUE=$(claim.sh)`, `AM=$(auto-merge.sh)`, `case "$(unblock-check.sh)"`) must emit **only** its return token on stdout. Mutating `gh` writes (`gh issue edit|comment|create`, `gh pr create|merge`, `gh label create`, `gh project item-edit`, `gh api --method POST|PUT|PATCH|DELETE`) print the resource URL/confirmation to stdout on success even non-interactively — send that to `/dev/null` (`>/dev/null`, keeping stderr open for `|| log WARN`) or capture it into a local (`out=$(gh … 2>&1)`); send any diagnostics through `log` (stderr), never bare `echo`. A leaked URL corrupts the captured value (the PR #28 / #29 bug class). This holds even for scripts not currently captured (e.g. `reclaim.sh`, `project_sync` in `lib.sh`) so the contract can't rot if a caller later wraps them in `$(…)`. Exception: `bootstrap-labels.sh` deliberately prints per-label progress to stdout — that is human-facing setup output, not a captured return value. Regression-guard new captured + mutating scripts with the `GH_EMIT_WRITE_URL` stub pattern (`tests/orchestration/helpers/gh-stub.sh`), asserting the leaked `STUB-URL` never reaches the script's stdout.
 
 <!-- orchestration-conventions -->
@@ -46,6 +49,7 @@ Format: `type(scope): subject`
 ## Versioning (SemVer — bump `plugins/orchestration/.claude-plugin/plugin.json`)
 - **fix** → patch (`x.y.Z`); **feat** → minor (`x.Y.0`); breaking change → major (`X.0.0`).
 - The marketplace pulls `main` and the plugin cache keys on this `version` — **a merge that does not bump it never reaches installed users.** Bump it in the same PR as the change.
+- `package.json` `version` and the `github:Laeyoung/Ganpan#vX.Y.Z` pins in `plugins/ganpan-codex/skills/ganpan-setup/SKILL.md` must equal `plugin.json` (tests enforce it). After the merge, run `scripts/release.sh X.Y.Z` so the pinned tag exists.
 
 ## Development workflow & history
 - **Before starting** a feature or bugfix, check for prior history — search `docs/superpowers/` (specs & plans) and `docs/log/` (change records). Build on past decisions instead of relitigating them.

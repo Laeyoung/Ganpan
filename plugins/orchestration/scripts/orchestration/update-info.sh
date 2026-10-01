@@ -71,7 +71,11 @@ esac
 
 # --- per-mode guidance ---
 if [ "$mode" = "copy-in" ]; then
-  guidance="  ./install.sh . --target both --force      # re-run from your repo root (use your actual target path)"
+  # Engines bootstrapped by ganpan-setup (`npx skills add` path) have no ganpan checkout to
+  # run install.sh from — give the pinned npx form too. Keep the repo's own --target.
+  pin="X.Y.Z"; [ "$latest" = "unknown" ] || pin="$latest"
+  guidance="  ./install.sh . --target both --force      # from a ganpan checkout (use your actual target path)
+  npx -y github:$SLUG#v$pin init --force --target <codex|claude|antigravity|both|all>   # if installed via npx"
 else
   guidance='  Run /plugin, then update "ganpan@laeyoung" from the marketplace manager.'
 fi

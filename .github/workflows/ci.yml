@@ -24,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # bin/ganpan.mjs (tests/cli.bats) needs node >= 18; pin it for determinism.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       # Tools the suite needs: bats (test runner), shellcheck (lint), jq + yq (manifest /
       # codex-skill YAML validation). gh is stubbed by the tests, so it is not installed.
       - name: Install tools (Linux)
@@ -53,12 +58,13 @@ jobs:
           shellcheck --version | sed -n '1,2p'
           jq --version
           yq --version
+          node --version
 
       - name: shellcheck
-        run: shellcheck plugins/orchestration/scripts/orchestration/*.sh
+        run: shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
 
       - name: validate manifests
-        run: jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json
+        run: jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json
 
       - name: bats
         run: bats tests/*.bats tests/orchestration/*.bats

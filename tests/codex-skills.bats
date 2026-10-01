@@ -210,3 +210,58 @@ setup() {
   run grep -F '승인(approve)' "$readme"
   [ "$status" -eq 0 ]
 }
+
+@test "npx skills discovery: exactly the 6 ganpan-* SKILL.md files are tracked" {
+  # The skills CLI finds our skills via its recursive fallback. A root SKILL.md or a
+  # tracked skills/, .agents/skills/, .claude/skills/ at the repo root would shadow it
+  # (a shallower SKILL.md hides everything nested). Checked on git-tracked files —
+  # that is what `npx skills add Laeyoung/Ganpan` clones.
+  run git -C "$REPO_ROOT" ls-files -- ':(glob)**/SKILL.md'
+  [ "$status" -eq 0 ]
+  expected="plugins/ganpan-codex/skills/ganpan-qa-check/SKILL.md
+plugins/ganpan-codex/skills/ganpan-review-queue/SKILL.md
+plugins/ganpan-codex/skills/ganpan-setup/SKILL.md
+plugins/ganpan-codex/skills/ganpan-triage/SKILL.md
+plugins/ganpan-codex/skills/ganpan-update/SKILL.md
+plugins/ganpan-codex/skills/ganpan-work-issue/SKILL.md"
+  [ "$output" = "$expected" ]
+  run git -C "$REPO_ROOT" ls-files -- SKILL.md skills .agents/skills .claude/skills
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "ganpan-setup pins the engine bootstrap to the current plugin version" {
+  version="$(jq -r .version "$REPO_ROOT/plugins/orchestration/.claude-plugin/plugin.json")"
+  skill="$CODEX_SKILLS/ganpan-setup/SKILL.md"
+  run grep -q "npx -y github:Laeyoung/Ganpan#v$version init" "$skill"
+  [ "$status" -eq 0 ]
+  # every pin in the file is the current version (no stale second pin)
+  run bash -c "grep -oE 'github:Laeyoung/Ganpan#v[0-9]+\.[0-9]+\.[0-9]+' '$skill' | sort -u"
+  [ "$output" = "github:Laeyoung/Ganpan#v$version" ]
+  # never the mutable branch ref
+  run grep -E 'github:Laeyoung/Ganpan( |$|#main)' "$skill"
+  [ "$status" -ne 0 ]
+  # the skill must never run --force itself
+  run grep -q 'never run `--force` yourself' "$skill"
+  [ "$status" -eq 0 ]
+}
+
+@test "lane skills hard-stop when the engine is missing" {
+  for lane in triage work-issue review-queue qa-check; do
+    run grep -q 'If `scripts/orchestration/lib.sh` is missing, stop' "$CODEX_SKILLS/ganpan-$lane/SKILL.md"
+    [ "$status" -eq 0 ]
+    run grep -q 'ganpan-setup' "$CODEX_SKILLS/ganpan-$lane/SKILL.md"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "ganpan-setup handles a pinned tag that is not published yet (merge-to-tag window)" {
+  # main can carry a bumped pin before scripts/release.sh has pushed the tag (this repo
+  # auto-merges); the agent must report that plainly and stop, not relay a raw npm error
+  # or fall back to the mutable main ref.
+  skill="$CODEX_SKILLS/ganpan-setup/SKILL.md"
+  run grep -q 'is not tagged yet' "$skill"
+  [ "$status" -eq 0 ]
+  run grep -qi 'do not fall back to `main`' "$skill"
+  [ "$status" -eq 0 ]
+}
