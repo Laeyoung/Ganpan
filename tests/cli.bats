@@ -312,3 +312,16 @@ fill_config() {
   run grep -c "ganpan-orchestration: v$PLUGIN_VERSION" "$lib"
   [ "$output" = "1" ]
 }
+
+@test "validate: remediation hints use the pinned npx command (ganpan is not on PATH under npx)" {
+  T="$BATS_TEST_TMPDIR/empty"; mkdir -p "$T"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"engine missing: scripts/orchestration/lib.sh — run \`npx -y github:Laeyoung/Ganpan#v$PLUGIN_VERSION init\`"* ]]
+  [[ "$output" != *'run `ganpan init`'* ]]
+  T2="$BATS_TEST_TMPDIR/t"; install_fresh "$T2"; fill_config "$T2"
+  lib="$T2/scripts/orchestration/lib.sh"
+  sed "s/ganpan-orchestration: v[0-9.]*/ganpan-orchestration: v0.0.1/" "$lib" > "$lib.tmp" && mv "$lib.tmp" "$lib"
+  run node "$CLI" validate "$T2"
+  [[ "$output" == *"update with \`npx -y github:Laeyoung/Ganpan#v$PLUGIN_VERSION init --force\`"* ]]
+}

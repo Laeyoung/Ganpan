@@ -254,3 +254,14 @@ plugins/ganpan-codex/skills/ganpan-work-issue/SKILL.md"
     [ "$status" -eq 0 ]
   done
 }
+
+@test "ganpan-setup handles a pinned tag that is not published yet (merge-to-tag window)" {
+  # main can carry a bumped pin before scripts/release.sh has pushed the tag (this repo
+  # auto-merges); the agent must report that plainly and stop, not relay a raw npm error
+  # or fall back to the mutable main ref.
+  skill="$CODEX_SKILLS/ganpan-setup/SKILL.md"
+  run grep -q 'is not tagged yet' "$skill"
+  [ "$status" -eq 0 ]
+  run grep -qi 'do not fall back to `main`' "$skill"
+  [ "$status" -eq 0 ]
+}

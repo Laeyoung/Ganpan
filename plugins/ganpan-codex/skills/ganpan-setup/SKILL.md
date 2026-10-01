@@ -19,6 +19,7 @@ Use this skill from the target repository root. This skill pins ganpan **v1.16.0
      npx -y github:Laeyoung/Ganpan#v1.16.0 init --force
      ```
      Then continue setup against the installed engine.
+   - If `npx` fails because the ref `v1.16.0` cannot be found, v1.16.0 is not tagged yet (the tag is pushed by the maintainer's release step after the merge). Report that, ask the user to retry later or install from a ganpan checkout with `./install.sh <repo> --target codex`, and stop. Do not fall back to `main` or another unpinned ref.
 4. Prefer `.ganpan/orchestration.json` for new installs. Legacy `.claude/orchestration.json` remains a fallback.
 5. Bootstrap labels and issue templates only from repo-owned files.
 6. Check the result — each `FAIL` line names what is still missing (e.g. `repo`/`bot` placeholders):

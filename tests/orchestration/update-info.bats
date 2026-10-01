@@ -88,3 +88,25 @@ mk_copyin() {
   [[ "$output" == *"latest:"*"9.9.9"* ]]
   [[ "$output" == *"/plugin"* ]]
 }
+
+@test "copy-in: also prints the pinned npx update for engines installed via npx skills" {
+  # A repo bootstrapped with `npx … init` has no install.sh of its own; it needs the npx form,
+  # pinned to the latest version, keeping its own --target.
+  mk_copyin "$BATS_TEST_TMPDIR/repo" 1.5.0
+  queue_response '{"version":"9.9.9"}'
+  cd "$BATS_TEST_TMPDIR/repo"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"npx -y github:Laeyoung/Ganpan#v9.9.9 init --force"* ]]
+  [[ "$output" == *"--target"* ]]
+}
+
+@test "copy-in, latest unknown: npx guidance uses a vX.Y.Z placeholder, not v'unknown'" {
+  mk_copyin "$BATS_TEST_TMPDIR/repo" 1.5.0
+  export GH_EXIT=1                                    # gh api fails → latest unknown
+  cd "$BATS_TEST_TMPDIR/repo"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"npx -y github:Laeyoung/Ganpan#vX.Y.Z init --force"* ]]
+  [[ "$output" != *"#vunknown"* ]]
+}

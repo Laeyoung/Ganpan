@@ -82,6 +82,9 @@ Do this right after the merge: until the tag exists, the new version's
 `ganpan-setup` bootstrap (`npx -y github:Laeyoung/Ganpan#vX.Y.Z init`) fails
 with "tag not found" (skills installed from the previous version keep working).
 If the push fails, the script prints `git tag -d vX.Y.Z` to remove the local tag.
+This repo sets `reviewer.autoMerge: true`, so the Reviewer lane can merge a version
+bump with no human present — check for an untagged `main` version after any bump
+merge (`git ls-remote --tags origin "v$(jq -r .version plugins/orchestration/.claude-plugin/plugin.json)"`).
 
 ### 7. Verify the release reached users
 - Fresh checkout / scratch repo: `/plugin` → update `ganpan@laeyoung`; confirm

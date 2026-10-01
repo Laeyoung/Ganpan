@@ -28,6 +28,12 @@ function version() {
   return JSON.parse(readFileSync(PLUGIN_JSON, 'utf8')).version;
 }
 
+// npxCmd — the runnable form of a ganpan subcommand: under `npx github:…` distribution
+// the `ganpan` bin is not on PATH, so hints must print the pinned npx invocation.
+function npxCmd(sub) {
+  return `npx -y github:Laeyoung/Ganpan#v${version()} ${sub}`;
+}
+
 function fail(msg) {
   process.stderr.write(`ganpan: ${msg}\n`);
   return 1;
@@ -46,7 +52,7 @@ function checkConfig(root, report) {
   if (fromEnv) rel = fromEnv;
   else if (existsSync(join(root, '.ganpan/orchestration.json'))) rel = '.ganpan/orchestration.json';
   else if (existsSync(join(root, '.claude/orchestration.json'))) rel = '.claude/orchestration.json';
-  else return report('FAIL', 'config missing: .ganpan/orchestration.json (or legacy .claude/orchestration.json) — run `ganpan init`');
+  else return report('FAIL', `config missing: .ganpan/orchestration.json (or legacy .claude/orchestration.json) — run \`${npxCmd('init')}\``);
 
   const path = isAbsolute(rel) ? rel : join(root, rel);
   if (!existsSync(path)) return report('FAIL', `config not found: ${path}${fromEnv ? ' (from $ORCH_CONFIG)' : ''}`);
@@ -99,17 +105,17 @@ function cmdValidate(args) {
 
   const lib = join(root, 'scripts/orchestration/lib.sh');
   if (!existsSync(lib)) {
-    report('FAIL', 'engine missing: scripts/orchestration/lib.sh — run `ganpan init`');
+    report('FAIL', `engine missing: scripts/orchestration/lib.sh — run \`${npxCmd('init')}\``);
   } else {
     const m = readFileSync(lib, 'utf8').match(/ganpan-orchestration: v(\d+\.\d+\.\d+)/);
     const cli = version();
-    if (!m) report('warn', 'engine lib.sh has no ganpan-orchestration sentinel — `ganpan init --force` re-stamps it');
-    else if (m[1] !== cli) report('warn', `engine v${m[1]} differs from ganpan v${cli} — update with \`ganpan init --force\``);
+    if (!m) report('warn', `engine lib.sh has no ganpan-orchestration sentinel — \`${npxCmd('init --force')}\` re-stamps it`);
+    else if (m[1] !== cli) report('warn', `engine v${m[1]} differs from ganpan v${cli} — update with \`${npxCmd('init --force')}\``);
     else report('ok', `engine version v${m[1]}`);
   }
 
   if (existsSync(join(root, '.github/labels.yml'))) report('ok', 'labels .github/labels.yml');
-  else report('FAIL', 'labels missing: .github/labels.yml — run `ganpan init`');
+  else report('FAIL', `labels missing: .github/labels.yml — run \`${npxCmd('init')}\``);
 
   return failed ? 1 : 0;
 }
