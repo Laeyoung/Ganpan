@@ -1,7 +1,7 @@
 # `npx skills add Laeyoung/Ganpan` install surface
 
 - **Date:** 2026-09-29
-- **Issue / PR:** — / —
+- **Issue / PR:** — / #90
 - **Type:** feat
 - **Version:** 1.15.1 → 1.16.0 (feat → minor)
 
