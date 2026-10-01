@@ -131,8 +131,11 @@ setup() {
 }
 
 @test "ganpan.mjs imports only node: built-ins" {
-  run grep -E "^import .* from '[^n]|^import .* from 'n[^o]" "$CLI"
-  [ "$status" -ne 0 ]
+  # every import specifier must carry the literal node: prefix ('node-fetch' etc. must fail)
+  run grep -cE "^import " "$CLI"
+  [ "$output" -gt 0 ]
+  run bash -c "grep -E \"^import \" '$CLI' | grep -v \"from 'node:\""
+  [ -z "$output" ]
 }
 ```
 
