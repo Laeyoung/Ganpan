@@ -182,3 +182,23 @@ no_tags_anywhere() {
   [[ "$output" == *"git tag -d v1.2.3"* ]]
   [ -z "$(git ls-remote --tags "$BARE")" ]
 }
+
+@test "canonical-remote guard accepts SSH host aliases (git@github.com-<alias>:Laeyoung/Ganpan.git)" {
+  # Maintainers with several GitHub accounts use ~/.ssh/config host aliases; the guard must
+  # still recognise the canonical repo. GIT_SSH_COMMAND=false makes the later fetch fail
+  # instantly and offline — we only assert the remote guard itself passed.
+  git -C "$WORK" remote set-url origin "git@github.com-personal.invalid:Laeyoung/Ganpan.git"
+  cd "$WORK"
+  run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false bash "$RELEASE" --dry-run 1.2.3
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"is not Laeyoung/Ganpan"* ]]
+  [[ "$output" == *"git fetch origin main failed"* ]]
+}
+
+@test "canonical-remote guard still rejects a fork behind an SSH host alias" {
+  git -C "$WORK" remote set-url origin "git@github.com-personal.invalid:someone/Ganpan.git"
+  cd "$WORK"
+  run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false bash "$RELEASE" --dry-run 1.2.3
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is not Laeyoung/Ganpan"* ]]
+}

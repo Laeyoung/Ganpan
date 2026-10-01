@@ -48,7 +48,8 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 [ -z "$(git status --porcelain)" ] || die "working tree is not clean"
 
 url="$(git remote get-url "$REMOTE" 2>/dev/null)" || die "no remote named '$REMOTE'"
-remote_re="${GANPAN_RELEASE_REMOTE_RE:-^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)Laeyoung/Ganpan(\.git)?/?$}"
+# git@github.com-<alias>: covers ~/.ssh/config host aliases (multi-account setups).
+remote_re="${GANPAN_RELEASE_REMOTE_RE:-^(https://github\.com/|git@github\.com[^:/]*:|ssh://git@github\.com[^/]*/)Laeyoung/Ganpan(\.git)?/?$}"
 printf '%s\n' "$url" | grep -Eiq "$remote_re" \
   || die "remote '$REMOTE' ($url) is not Laeyoung/Ganpan — the pinned bootstrap resolves there; pass --remote <canonical>"
 
