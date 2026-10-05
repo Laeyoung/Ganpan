@@ -250,3 +250,13 @@ no_tags_anywhere() {
     [[ "$output" == *"git fetch origin main failed"* ]]
   done
 }
+
+@test "--remote without a name and a second positional arg are usage errors (exit 2), no tag" {
+  run release --remote
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--remote requires a name"* ]]
+  run release 1.2.3 4.5.6
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unexpected arg: 4.5.6"* ]]
+  no_tags_anywhere
+}
