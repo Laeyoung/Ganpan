@@ -187,7 +187,7 @@ no_tags_anywhere() {
   # Maintainers with several GitHub accounts use ~/.ssh/config host aliases; the guard must
   # still recognise the canonical repo. GIT_SSH_COMMAND=false makes the later fetch fail
   # instantly and offline — we only assert the remote guard itself passed.
-  git -C "$WORK" remote set-url origin "git@github.com-personal.invalid:Laeyoung/Ganpan.git"
+  git -C "$WORK" remote set-url origin "git@github.com-personal:Laeyoung/Ganpan.git"
   cd "$WORK"
   run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false bash "$RELEASE" --dry-run 1.2.3
   [ "$status" -eq 1 ]
@@ -196,9 +196,57 @@ no_tags_anywhere() {
 }
 
 @test "canonical-remote guard still rejects a fork behind an SSH host alias" {
-  git -C "$WORK" remote set-url origin "git@github.com-personal.invalid:someone/Ganpan.git"
+  git -C "$WORK" remote set-url origin "git@github.com-personal:someone/Ganpan.git"
   cd "$WORK"
   run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false bash "$RELEASE" --dry-run 1.2.3
   [ "$status" -eq 1 ]
   [[ "$output" == *"is not Laeyoung/Ganpan"* ]]
+}
+
+@test "canonical-remote guard rejects lookalike hosts (github.com.<evil>) behind the alias allowance" {
+  for url in "git@github.com.evil.example:Laeyoung/Ganpan.git" "ssh://git@github.com.evil.example/Laeyoung/Ganpan.git"; do
+    git -C "$WORK" remote set-url origin "$url"
+    cd "$WORK"
+    run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false bash "$RELEASE" --dry-run 1.2.3
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"is not Laeyoung/Ganpan"* ]]
+  done
+}
+
+@test "--remote=<name> equals form selects the remote like the space form" {
+  git -C "$WORK" remote rename origin upstream
+  run release --remote=upstream 1.2.3
+  [ "$status" -eq 0 ]
+  run git ls-remote --tags "$BARE" refs/tags/v1.2.3
+  [ -n "$output" ]
+}
+
+@test "-h / --help print the usage header and exit 0" {
+  for flag in -h --help; do
+    run bash "$RELEASE" "$flag"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage: scripts/release.sh [--dry-run] [--remote <name>] <X.Y.Z>"* ]]
+  done
+}
+
+@test "jq missing from PATH -> exit 1 with an actionable message, no tag" {
+  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"; mkdir -p "$FAKEBIN"
+  for tool in bash git sed grep awk head dirname; do ln -s "$(command -v "$tool")" "$FAKEBIN/$tool"; done
+  cd "$WORK"
+  run env PATH="$FAKEBIN" GANPAN_RELEASE_REMOTE_RE='^file://' "$FAKEBIN/bash" "$RELEASE" 1.2.3
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"jq is required but not found on PATH"* ]]
+  no_tags_anywhere
+}
+
+@test "canonical-remote guard accepts the plain https and ssh:// forms" {
+  for url in "https://github.com/Laeyoung/Ganpan.git" "https://github.com/laeyoung/ganpan" "ssh://git@github.com/Laeyoung/Ganpan.git"; do
+    git -C "$WORK" remote set-url origin "$url"
+    cd "$WORK"
+    # an unreachable rewrite keeps the later fetch offline; only the guard verdict matters
+    run env -u GANPAN_RELEASE_REMOTE_RE GIT_SSH_COMMAND=false GIT_ALLOW_PROTOCOL=file bash "$RELEASE" --dry-run 1.2.3
+    [ "$status" -eq 1 ]
+    [[ "$output" != *"is not Laeyoung/Ganpan"* ]]
+    [[ "$output" == *"git fetch origin main failed"* ]]
+  done
 }

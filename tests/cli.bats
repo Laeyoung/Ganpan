@@ -325,3 +325,20 @@ fill_config() {
   run node "$CLI" validate "$T2"
   [[ "$output" == *"update with \`npx -y github:Laeyoung/Ganpan#v$PLUGIN_VERSION init --force\`"* ]]
 }
+
+@test "init: --target=<value> equals form is forwarded like the space form" {
+  T="$BATS_TEST_TMPDIR/t"; mkdir -p "$T/.git"
+  run node "$CLI" init "$T" --target=claude
+  [ "$status" -eq 0 ]
+  [ -f "$T/.claude/commands/work-issue.md" ]
+  [ ! -d "$T/.agents" ]
+}
+
+@test "validate: engine lib.sh without any sentinel is a warn, still exit 0" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  lib="$T/scripts/orchestration/lib.sh"
+  grep -v 'ganpan-orchestration:' "$lib" > "$lib.tmp" && mv "$lib.tmp" "$lib"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warn engine lib.sh has no ganpan-orchestration sentinel"* ]]
+}
