@@ -38,6 +38,10 @@ jobs:
           # flags SC2015/SC2119/SC2120 notes that newer releases (local dev runs 0.11.0) do not —
           # those would fail CI on existing, accepted engine code.
           SHELLCHECK_VERSION: v0.11.0
+          # Pin yq and verify its published SHA-256 (from the release's `checksums` file) — a
+          # floating releases/latest download would change CI's validator with no diff signal.
+          YQ_VERSION: v4.54.1
+          YQ_SHA256: 8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
@@ -45,8 +49,10 @@ jobs:
           wget -qO- "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" | tar -xJ
           sudo install -m 0755 "shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
           rm -rf "shellcheck-${SHELLCHECK_VERSION}"
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+          wget -qO yq_linux_amd64 "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  yq_linux_amd64" | sha256sum -c -
+          sudo install -m 0755 yq_linux_amd64 /usr/local/bin/yq
+          rm -f yq_linux_amd64
 
       - name: Install tools (macOS)
         if: runner.os == 'macOS'
