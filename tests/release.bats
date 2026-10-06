@@ -154,7 +154,7 @@ no_tags_anywhere() {
   run release --dry-run 1.2.3
   [ "$status" -eq 0 ]
   [[ "$output" == *'git tag -a v1.2.3 -m "ganpan v1.2.3"'* ]]
-  [[ "$output" == *"git push origin v1.2.3"* ]]
+  [[ "$output" == *"git push origin refs/tags/v1.2.3"* ]]
   no_tags_anywhere
 }
 
@@ -259,4 +259,13 @@ no_tags_anywhere() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"unexpected arg: 4.5.6"* ]]
   no_tags_anywhere
+}
+
+@test "tag push is unambiguous when a branch named vX.Y.Z also exists" {
+  git -C "$WORK" branch v1.2.3
+  git -C "$WORK" push -q origin v1.2.3                   # remote branch refs/heads/v1.2.3
+  run release 1.2.3
+  [ "$status" -eq 0 ]
+  run git ls-remote "$BARE" refs/tags/v1.2.3
+  [ -n "$output" ]
 }

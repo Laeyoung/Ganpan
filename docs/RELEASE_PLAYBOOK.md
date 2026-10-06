@@ -76,7 +76,7 @@ report as "latest."
 From an up-to-date `main` checkout of `Laeyoung/Ganpan`:
 ```bash
 scripts/release.sh --dry-run X.Y.Z   # all guards, no changes
-scripts/release.sh X.Y.Z             # git tag -a vX.Y.Z + git push origin vX.Y.Z
+scripts/release.sh X.Y.Z             # git tag -a vX.Y.Z + git push origin refs/tags/vX.Y.Z
 ```
 Do this right after the merge: until the tag exists, the new version's
 `ganpan-setup` bootstrap (`npx -y github:Laeyoung/Ganpan#vX.Y.Z init`) fails

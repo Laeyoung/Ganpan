@@ -57,9 +57,15 @@ function checkConfig(root, report) {
   const path = isAbsolute(rel) ? rel : join(root, rel);
   if (!existsSync(path)) return report('FAIL', `config not found: ${path}${fromEnv ? ' (from $ORCH_CONFIG)' : ''}`);
 
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (e) {
+    return report('FAIL', `cannot read config: ${path} (${e.code ?? e.message})`);
+  }
   let cfg;
   try {
-    cfg = JSON.parse(readFileSync(path, 'utf8'));
+    cfg = JSON.parse(text);
   } catch (e) {
     return report('FAIL', `config is not valid JSON: ${path} (${e.message})`);
   }
@@ -104,7 +110,9 @@ function cmdValidate(args) {
   checkConfig(root, report);
 
   const lib = join(root, 'scripts/orchestration/lib.sh');
-  if (!existsSync(lib)) {
+  if (existsSync(lib) && !statSync(lib).isFile()) {
+    report('FAIL', 'engine scripts/orchestration/lib.sh is not a regular file');
+  } else if (!existsSync(lib)) {
     report('FAIL', `engine missing: scripts/orchestration/lib.sh — run \`${npxCmd('init')}\``);
   } else {
     const m = readFileSync(lib, 'utf8').match(/ganpan-orchestration: v(\d+\.\d+\.\d+)/);

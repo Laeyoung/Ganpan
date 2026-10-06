@@ -342,3 +342,24 @@ fill_config() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"warn engine lib.sh has no ganpan-orchestration sentinel"* ]]
 }
+
+@test "validate: lib.sh that is a directory -> FAIL, no stack trace" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  lib="$T/scripts/orchestration/lib.sh"
+  rm "$lib" && mkdir "$lib"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL engine scripts/orchestration/lib.sh is not a regular file"* ]]
+  [[ "$output" != *"    at "* ]]
+}
+
+@test "validate: unreadable config is reported as a read error, not as invalid JSON" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"
+  cfg="$T/.ganpan/orchestration.json"
+  rm "$cfg" && mkdir "$cfg"                              # EISDIR on read
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL cannot read config: $cfg"* ]]
+  [[ "$output" != *"not valid JSON"* ]]
+  [[ "$output" != *"    at "* ]]
+}
