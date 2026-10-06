@@ -7,7 +7,7 @@ Commands namespace as `/ganpan:*`. Single source of truth lives under
 ## Development
 ```bash
 bats tests/*.bats tests/orchestration/*.bats   # full test suite (includes codex-skills.bats, antigravity.bats, cli.bats, release.bats)
-shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
+shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh
 jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json  # validate manifests
 ```
 
@@ -17,7 +17,7 @@ jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin
 - `plugins/orchestration/references/lanes/` — shared lane-protocol references (canonical; Codex skills copy these, Claude commands point at them).
 - `plugins/orchestration/assets/` — files copied into target repos (config template, labels, issue template, CLAUDE.md).
 - `plugins/ganpan-codex/skills/` — Codex repo-local skill source (`ganpan-*`), installed to `.agents/skills/`.
-- `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`; `--target claude|codex|antigravity|both|all`).
+- `install.sh` — copy-in install path (rewrites `${CLAUDE_PLUGIN_ROOT}/` → `./`; `--target claude|codex|antigravity|both|all`). Refuses this checkout as a target unless `--self`, which refreshes only the gitignored dogfood engine copy (`./install.sh . --self`, after each release).
 - `bin/ganpan.mjs` + `package.json` — zero-dependency Node CLI (`init` delegates to `install.sh`, `validate` is an offline check), run as `npx -y github:Laeyoung/Ganpan#vX.Y.Z <cmd>`; `ganpan-setup` uses it to bootstrap the engine after `npx skills add Laeyoung/Ganpan`.
 - `scripts/release.sh` — guarded `vX.Y.Z` tagger run after a version-bump merge (the pinned npx bootstrap resolves the tag).
 

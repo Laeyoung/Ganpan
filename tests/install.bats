@@ -194,3 +194,61 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"github_pat_secret_should_not_print"* ]]
 }
+
+# mk_toolkit_copy <dir> — a throwaway ganpan checkout (install.sh + plugins + docs) so
+# self-install tests never touch this repo's own dogfood copy.
+mk_toolkit_copy() {
+  mkdir -p "$1/.git" "$1/docs"
+  cp "$REPO_ROOT/install.sh" "$1/"
+  cp -R "$REPO_ROOT/plugins" "$1/"
+  cp "$REPO_ROOT/docs/SETUP.md" "$1/docs/"
+  printf '# dev rules (tracked, no conventions sentinel)\n' > "$1/CLAUDE.md"
+  printf '# agents dev rules\n' > "$1/AGENTS.md"
+}
+
+@test "install into the toolkit source without --self is refused, naming the flag" {
+  SRC_COPY="$BATS_TEST_TMPDIR/src"; mk_toolkit_copy "$SRC_COPY"
+  run --separate-stderr bash "$SRC_COPY/install.sh" "$SRC_COPY"
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"target must differ from the toolkit source"* ]]
+  [[ "$stderr" == *"--self"* ]]
+  [ ! -e "$SRC_COPY/scripts/orchestration/lib.sh" ]
+}
+
+@test "--self with a target other than the toolkit source is refused" {
+  run --separate-stderr bash "$REPO_ROOT/install.sh" "$TARGET" --self
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"--self"* ]]
+  [ ! -e "$TARGET/scripts/orchestration/lib.sh" ]
+}
+
+@test "--self refreshes the dogfood engine copy and restamps a stale sentinel" {
+  SRC_COPY="$BATS_TEST_TMPDIR/src"; mk_toolkit_copy "$SRC_COPY"
+  version="$(jq -r .version "$REPO_ROOT/plugins/orchestration/.claude-plugin/plugin.json")"
+  mkdir -p "$SRC_COPY/scripts/orchestration"
+  printf 'old\n\n# ganpan-orchestration: v0.0.1\n' > "$SRC_COPY/scripts/orchestration/lib.sh"
+  run bash "$SRC_COPY/install.sh" "$SRC_COPY" --self
+  [ "$status" -eq 0 ]
+  [ "$(tail -1 "$SRC_COPY/scripts/orchestration/lib.sh")" = "# ganpan-orchestration: v$version" ]
+  run grep -c 'ganpan-orchestration:' "$SRC_COPY/scripts/orchestration/lib.sh"
+  [ "$output" = "1" ]
+  [ -f "$SRC_COPY/references/lanes/work-issue.md" ]
+  [ -f "$SRC_COPY/.claude/commands/work-issue.md" ]
+  # engine copies match the canonical sources once the sentinel is ignored
+  for f in "$SRC_COPY"/plugins/orchestration/scripts/orchestration/*.sh; do
+    diff -qB <(grep -v ganpan-orchestration: "$f") \
+             <(grep -v ganpan-orchestration: "$SRC_COPY/scripts/orchestration/$(basename "$f")")
+  done
+}
+
+@test "--self leaves the checkout's tracked files alone (no conventions, config, skills, docs)" {
+  SRC_COPY="$BATS_TEST_TMPDIR/src"; mk_toolkit_copy "$SRC_COPY"
+  run bash "$SRC_COPY/install.sh" "$SRC_COPY" --self --target all
+  [ "$status" -eq 0 ]
+  [ "$(cat "$SRC_COPY/CLAUDE.md")" = "# dev rules (tracked, no conventions sentinel)" ]
+  [ "$(cat "$SRC_COPY/AGENTS.md")" = "# agents dev rules" ]
+  [ ! -e "$SRC_COPY/.agents" ]          # a root .agents/skills would shadow npx skills discovery
+  [ ! -e "$SRC_COPY/.ganpan" ]
+  [ ! -e "$SRC_COPY/.claude/orchestration.json" ]
+  [ ! -e "$SRC_COPY/.github" ]
+}

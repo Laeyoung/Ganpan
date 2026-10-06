@@ -13,6 +13,10 @@
 | 버전 | plugin.json = package.json = `ganpan-setup` 고정 버전 = `1.16.1` |
 | 환경 | macOS (darwin 25), bash 5.3.9 + `/bin/bash` 3.2.57, Node v24.13.0 (+ `npx node@18`), Bats 1.13.0, shellcheck 0.11.0, jq 1.7.1, yq v4.53.3 |
 
+> **처리 결과 (2026-10-06):** F1–F6과 I1은 브랜치 `fix/qa-report-2026-10-06`에서 수정했습니다(버전 1.17.0).
+> F1은 옵션 1(`install.sh --self`)로 진행했습니다. 기능 추가이므로 patch가 아닌 minor bump입니다.
+> 결정 사항은 `docs/log/2026-10-06-qa-report-followups.md`에 있습니다. I2는 의도된 상태이므로 그대로 둡니다.
+
 ## 결과 요약
 
 | # | 검사 | 결과 |
@@ -67,7 +71,7 @@
      예외 추가 필요). install.sh를 임시 디렉터리에 설치한 뒤 루트로 복사하는 래퍼입니다.
   3. 최소 대응: `docs/RELEASE_PLAYBOOK.md` §7에 "dogfood 사본 갱신" 수동 절차를 문서화합니다.
 - **검증:** 수정 후 `tail -1 scripts/orchestration/lib.sh`가 현재 버전을 보이고, 위 diff 루프 출력이 비어야 합니다.
-- [ ] 완료
+- [x] 완료
 
 ### F2 — [Low] `install.sh`가 shellcheck 보호 범위 밖
 - **현상:** `install.sh`는 지금 shellcheck에서 경고가 없지만, CI와 문서의 lint 명령에 빠져 있어 회귀를 막지 못합니다.
@@ -81,7 +85,7 @@
   `shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh`
 - **검증:** `shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh` → exit 0.
   PR CI가 통과하는지 확인합니다.
-- [ ] 완료
+- [x] 완료
 
 ### F3 — [Low] `ganpan validate`가 config 두 개가 다를 때 경고하지 않음
 - **현상:** `.ganpan/orchestration.json`과 `.claude/orchestration.json`이 둘 다 있고 내용이 다를 때:
@@ -102,7 +106,7 @@
   출력합니다(warn이므로 exit 코드는 그대로). 테스트는 `tests/cli.bats`에 넣습니다(내용이 다르면 warn,
   같으면 warn 없음). fix이므로 patch bump(1.16.2)가 필요합니다.
 - **검증:** `bats tests/cli.bats`
-- [ ] 완료
+- [x] 완료
 
 ### F4 — [Low] `update-info.sh`의 install.sh 안내 문구가 헷갈림
 - **현상:** copy-in 모드 안내 `./install.sh . --target both --force`에서 `.`가 대상 레포처럼 읽힙니다.
@@ -116,7 +120,7 @@
   `tests/orchestration/update-info.bats`의 copy-in 안내 테스트(`install.sh`와 `--force`가 출력에
   포함되는지 확인)가 계속 통과하는지 봅니다.
 - **검증:** `bats tests/orchestration/update-info.bats`
-- [ ] 완료
+- [x] 완료
 
 ### F5 — [Low] `claude plugin validate`가 marketplace description 누락을 경고
 - **현상:** `claude plugin validate .` → `⚠ description: No marketplace description provided`.
@@ -127,14 +131,14 @@
   "metadata": { "description": "GitHub-native agent orchestration toolkit (ganpan)." }
   ```
 - **검증:** `claude plugin validate .` → `✔ Validation passed`(경고 없음). `jq . .claude-plugin/marketplace.json`.
-- [ ] 완료
+- [x] 완료
 
 ### F6 — [Low] `docs/RELEASE_PLAYBOOK.md`의 "Current release readiness" 수치가 오래됨
 - **현상:** `bats = 204/204 passing`이라고 적혀 있지만 현재는 310개입니다.
 - **위치:** `docs/RELEASE_PLAYBOOK.md:119`
 - **권장 수정:** 수치를 지우고 "릴리스할 때마다 §3 게이트를 실행" 같은 시점 독립 문장으로 바꿉니다.
   숫자를 계속 유지하려면 릴리스마다 갱신해야 합니다.
-- [ ] 완료
+- [x] 완료
 
 ## 참고 사항 (Info — 수정 선택)
 

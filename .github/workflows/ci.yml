@@ -67,7 +67,7 @@ jobs:
           node --version
 
       - name: shellcheck
-        run: shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
+        run: shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh
 
       - name: validate manifests
         run: jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json

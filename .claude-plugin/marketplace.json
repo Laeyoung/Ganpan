@@ -1,6 +1,11 @@
 {
   "name": "laeyoung",
-  "owner": { "name": "Laeyoung Chang" },
+  "owner": {
+    "name": "Laeyoung Chang"
+  },
+  "metadata": {
+    "description": "GitHub-native agent orchestration toolkit (ganpan)."
+  },
   "plugins": [
     {
       "name": "ganpan",

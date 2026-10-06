@@ -93,7 +93,8 @@ old generated surface files first. Subsequent upgrades are automatic.
 `/ganpan:update` (Codex: the `ganpan-update` skill) is **advisory**: it shows your
 installed vs latest ganpan version and the exact steps to update — it never changes
 your repo. Plugin installs update via `/plugin` (the marketplace manager); copy-in
-installs re-run `install.sh <repo> --target both --force`. Safe to run anytime,
+installs re-run `install.sh <repo> --target <your-target> --force` from a ganpan
+checkout (or the pinned `npx … init --force` if installed via npx). Safe to run anytime,
 including inside a loop (it is read-only and does not prompt).
 
 For Codex repo-local skills, invoke the matching skill in the target repo:

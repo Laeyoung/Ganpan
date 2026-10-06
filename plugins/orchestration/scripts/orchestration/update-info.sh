@@ -73,8 +73,11 @@ esac
 if [ "$mode" = "copy-in" ]; then
   # Engines bootstrapped by ganpan-setup (`npx skills add` path) have no ganpan checkout to
   # run install.sh from — give the pinned npx form too. Keep the repo's own --target.
+  # install.sh runs from a ganpan checkout and takes THIS repo as its argument, so print
+  # the detected repo root rather than `.` (which reads as "the current repo").
   pin="X.Y.Z"; [ "$latest" = "unknown" ] || pin="$latest"
-  guidance="  ./install.sh . --target both --force      # from a ganpan checkout (use your actual target path)
+  repo_root="${copyin_lib%/scripts/orchestration/lib.sh}"
+  guidance="  ./install.sh \"$repo_root\" --target <codex|claude|antigravity|both|all> --force   # run from a ganpan checkout
   npx -y github:$SLUG#v$pin init --force --target <codex|claude|antigravity|both|all>   # if installed via npx"
 else
   guidance='  Run /plugin, then update "ganpan@laeyoung" from the marketplace manager.'

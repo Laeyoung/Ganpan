@@ -89,6 +89,21 @@ mk_copyin() {
   [[ "$output" == *"/plugin"* ]]
 }
 
+@test "copy-in: install.sh guidance names the repo root (not '.') and no fixed --target both" {
+  # install.sh runs from a ganpan checkout and takes the target repo as its argument;
+  # `.` would read as "this repo" — print the detected root, even from a subdirectory.
+  mk_copyin "$BATS_TEST_TMPDIR/repo" 1.5.0
+  mkdir -p "$BATS_TEST_TMPDIR/repo/sub"
+  queue_response '{"version":"9.9.9"}'
+  cd "$BATS_TEST_TMPDIR/repo"; root="$PWD"; cd sub
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"./install.sh \"$root\" --target <codex|claude|antigravity|both|all> --force"* ]]
+  [[ "$output" == *"run from a ganpan checkout"* ]]
+  [[ "$output" != *"install.sh . "* ]]
+  [[ "$output" != *"--target both --force"* ]]
+}
+
 @test "copy-in: also prints the pinned npx update for engines installed via npx skills" {
   # A repo bootstrapped with `npx … init` has no install.sh of its own; it needs the npx form,
   # pinned to the latest version, keeping its own --target.
