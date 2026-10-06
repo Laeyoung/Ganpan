@@ -265,3 +265,26 @@ plugins/ganpan-codex/skills/ganpan-work-issue/SKILL.md"
   run grep -qi 'do not fall back to `main`' "$skill"
   [ "$status" -eq 0 ]
 }
+
+@test "every version mention in ganpan-setup and every README npx pin equals plugin.json" {
+  # A bump must move all of them together; a stale README pin installs an old engine and a
+  # stale prose version ("pins ganpan vX", "ref vX cannot be found") misleads the agent.
+  version="$(jq -r .version "$REPO_ROOT/plugins/orchestration/.claude-plugin/plugin.json")"
+  run bash -c "grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' '$CODEX_SKILLS/ganpan-setup/SKILL.md' | sort -u"
+  [ "$output" = "v$version" ]
+  run bash -c "grep -oE 'github:Laeyoung/Ganpan#v[0-9]+\.[0-9]+\.[0-9]+' '$REPO_ROOT/README.md' | sort -u"
+  [ -n "$output" ]
+  [ "$output" = "github:Laeyoung/Ganpan#v$version" ]
+}
+
+@test "ganpan-setup tells the agent to pick --target for its host (Claude Code -> claude)" {
+  # The default --target codex writes AGENTS.md, which Claude Code does not read; a Claude Code
+  # agent must choose claude so the repo gets CLAUDE.md conventions.
+  skill="$CODEX_SKILLS/ganpan-setup/SKILL.md"
+  run grep -q 'Claude Code → `--target claude`' "$skill"
+  [ "$status" -eq 0 ]
+  run grep -q 'Antigravity → `--target antigravity`' "$skill"
+  [ "$status" -eq 0 ]
+  run grep -q 'Codex, Cursor and other `AGENTS.md` readers → `--target codex`' "$skill"
+  [ "$status" -eq 0 ]
+}

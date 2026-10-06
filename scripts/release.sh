@@ -75,10 +75,11 @@ mode="$(git ls-files -s bin/ganpan.mjs | awk '{print $1}')"
 
 # --- act ----------------------------------------------------------------------
 if [ -n "$DRY_RUN" ]; then
-  printf 'dry-run: all guards passed; would run:\n  git tag -a %s -m "ganpan %s"\n  git push %s %s\n' "$TAG" "$TAG" "$REMOTE" "$TAG"
+  printf 'dry-run: all guards passed; would run:\n  git tag -a %s -m "ganpan %s"\n  git push %s refs/tags/%s\n' "$TAG" "$TAG" "$REMOTE" "$TAG"
   exit 0
 fi
 
 git tag -a "$TAG" -m "ganpan $TAG"
-git push --quiet "$REMOTE" "$TAG" || die "push to $REMOTE failed; the local tag was kept — remove it with: git tag -d $TAG"
+# explicit ref: a branch named vX.Y.Z would make a bare "$TAG" refspec ambiguous
+git push --quiet "$REMOTE" "refs/tags/$TAG" || die "push to $REMOTE failed; the local tag was kept — remove it with: git tag -d $TAG"
 printf 'released %s -> %s\n' "$TAG" "$REMOTE"

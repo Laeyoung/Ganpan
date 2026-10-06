@@ -146,8 +146,8 @@ npx skills add Laeyoung/Ganpan
 Skills CLI는 **스킬 디렉터리만** 복사하므로, 엔진(`scripts/orchestration/`)은 레포마다 따로 설치해야 합니다. 대상 레포에서 `ganpan-setup` 스킬을 실행하면, 스킬에 고정(pin)된 버전으로 설치합니다. 직접 실행해도 됩니다:
 
 ```bash
-npx -y github:Laeyoung/Ganpan#v1.16.0 init       # 기본 --target codex (claude|antigravity|both|all 지정 가능)
-npx -y github:Laeyoung/Ganpan#v1.16.0 validate   # config·엔진·라벨 점검 (오프라인, FAIL 시 exit 1)
+npx -y github:Laeyoung/Ganpan#v1.16.1 init       # 기본 --target codex (claude|antigravity|both|all 지정 가능)
+npx -y github:Laeyoung/Ganpan#v1.16.1 validate   # config·엔진·라벨 점검 (오프라인, FAIL 시 exit 1)
 ```
 
 `bash`와 `jq`가 필요합니다(Windows는 Git Bash 또는 WSL). 엔진이 없는 레포에서 레인 스킬을 실행하면 즉시 멈추고 `ganpan-setup`을 먼저 실행하라고 안내합니다. 버전이 어긋나면 `ganpan-setup`이 `init --force` 명령을 **안내만** 합니다(직접 덮어쓰지 않음).
