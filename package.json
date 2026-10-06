@@ -1,0 +1,13 @@
+{
+  "name": "ganpan",
+  "version": "1.16.0",
+  "description": "GitHub-native agent orchestration toolkit — engine installer and validator for the ganpan-* agent skills.",
+  "private": true,
+  "type": "module",
+  "bin": { "ganpan": "./bin/ganpan.mjs" },
+  "files": ["bin", "install.sh", "plugins", "docs/SETUP.md"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "bats tests/*.bats tests/orchestration/*.bats" },
+  "repository": { "type": "git", "url": "git+https://github.com/Laeyoung/Ganpan.git" },
+  "license": "UNLICENSED"
+}

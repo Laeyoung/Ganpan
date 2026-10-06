@@ -53,6 +53,7 @@ gh auth status            # 인증 확인 (HTTPS 권장)
 | Copy-in Claude install | first-class fallback | `.claude/commands` + scripts |
 | Codex repo-local skills | Phase 1 MVP | `.agents/skills/ganpan-*` |
 | Antigravity CLI skills | Phase 1 (shared payload) | `.agents/skills/ganpan-*` |
+| Skills CLI (`npx skills`) | Phase 1 (shared payload) | `npx skills add Laeyoung/Ganpan` → `ganpan-*` skills |
 | CLI runner | planned | `ganpan lane ...` |
 | Codex plugin | planned | Codex plugin install |
 
@@ -129,6 +130,27 @@ Codex와 동일한 agents-skills payload를 설치합니다 (agy는 `.agents/ski
 - `.github/labels.yml` + issue template
 
 이미 `--target codex`/`both`로 설치했다면 디스크 상태가 동일하므로 재설치가 필요 없습니다. 설치 후 대상 레포에서 `agy` 실행 → `/skills`에 `ganpan-*` 6종이 보이면 성공. 레인은 이름으로 요청하거나 `/<skill-name>` 슬래시 형태로 호출합니다. Claude + Codex + Antigravity를 한 번에 설치하려면 `--target all`.
+
+### 방법 E — Skills CLI (`npx skills`)
+
+[Skills CLI](https://github.com/vercel-labs/skills)로 `ganpan-*` 스킬 6종을 Claude Code, Codex, Cursor 등 지원 에이전트에 설치합니다:
+
+```bash
+# 글로벌 에이전트 스킬로 설치 (모든 프로젝트에서 사용)
+npx skills add Laeyoung/Ganpan -g
+
+# 특정 프로젝트 범위로 설치
+npx skills add Laeyoung/Ganpan
+```
+
+Skills CLI는 **스킬 디렉터리만** 복사하므로, 엔진(`scripts/orchestration/`)은 레포마다 따로 설치해야 합니다. 대상 레포에서 `ganpan-setup` 스킬을 실행하면, 스킬에 고정(pin)된 버전으로 설치합니다. 직접 실행해도 됩니다:
+
+```bash
+npx -y github:Laeyoung/Ganpan#v1.16.0 init       # 기본 --target codex (claude|antigravity|both|all 지정 가능)
+npx -y github:Laeyoung/Ganpan#v1.16.0 validate   # config·엔진·라벨 점검 (오프라인, FAIL 시 exit 1)
+```
+
+`bash`와 `jq`가 필요합니다(Windows는 Git Bash 또는 WSL). 엔진이 없는 레포에서 레인 스킬을 실행하면 즉시 멈추고 `ganpan-setup`을 먼저 실행하라고 안내합니다. 버전이 어긋나면 `ganpan-setup`이 `init --force` 명령을 **안내만** 합니다(직접 덮어쓰지 않음).
 
 ---
 
@@ -259,6 +281,8 @@ plugins/ganpan-codex/
   ├─ skills/ganpan-*/                    # Codex repo-local skill source
   └─ assets/AGENTS.md                    # Codex target repo conventions
 install.sh                               # copy-in 설치/업그레이드
+bin/ganpan.mjs + package.json            # npx CLI (init → install.sh, validate)
+scripts/release.sh                       # vX.Y.Z 태그 (pinned npx bootstrap용)
 docs/SETUP.md                            # 상세 셋업 가이드
 tests/                                   # bats 테스트
 ```

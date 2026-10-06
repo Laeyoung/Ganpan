@@ -7,6 +7,8 @@ description: Claim one Ganpan status:agent-ready issue, implement it in a worktr
 
 Use this skill from the target repository root.
 
+**Preflight:** If `scripts/orchestration/lib.sh` is missing, stop — the Ganpan engine is not installed in this repository. Tell the user to run the `ganpan-setup` skill first; a lane never installs the engine itself.
+
 1. Read `references/work-issue.md`.
 2. Capture `REPO_ROOT="$PWD"` before any worktree operation.
 3. Resolve config once from the main checkout:
