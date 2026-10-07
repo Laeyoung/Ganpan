@@ -15,7 +15,7 @@ gate between "works on my branch" and "shipped to every installed user."
 ## 1. Quality gates (all must be green on the release branch)
 
 - [ ] **Tests pass:** `bats tests/*.bats tests/orchestration/*.bats` — 0 failures.
-- [ ] **Lint clean:** `shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh` — exit 0.
+- [ ] **Lint clean:** `shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh` — exit 0.
 - [ ] **Manifests valid:** `jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json` — all parse.
 - [ ] New/changed behavior has a test (captured-stdout + mutating scripts use the `GH_EMIT_WRITE_URL` stub pattern — see `tests/orchestration/helpers/gh-stub.sh`).
 

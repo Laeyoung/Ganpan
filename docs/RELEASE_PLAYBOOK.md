@@ -43,7 +43,7 @@ Edit `plugins/orchestration/.claude-plugin/plugin.json`:
 ### 3. Run the quality gates locally
 ```bash
 bats tests/*.bats tests/orchestration/*.bats
-shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh
+shellcheck plugins/orchestration/scripts/orchestration/*.sh scripts/release.sh install.sh
 jq . .claude-plugin/marketplace.json plugins/orchestration/.claude-plugin/plugin.json package.json
 ```
 All three must be clean. These are the same gates in the checklist §1.
@@ -92,6 +92,13 @@ merge (`git ls-remote --tags origin "v$(jq -r .version plugins/orchestration/.cl
 - Copy-in path: `./install.sh <scratch-repo>` (and `--target codex` / `--target both` / `--target antigravity`)
   installs without error.
 - Smoke-test one lane end-to-end against a throwaway issue.
+- Refresh this repo's own dogfood engine copy (the lanes that run on Ganpan's
+  issues use the gitignored root `scripts/orchestration/`, `references/`,
+  `.claude/commands/`), from an up-to-date `main` checkout:
+  ```bash
+  ./install.sh . --self              # engine payload only; tracked files untouched
+  tail -1 scripts/orchestration/lib.sh   # → # ganpan-orchestration: vX.Y.Z
+  ```
 
 ## Rollback
 
@@ -115,6 +122,7 @@ Tags are never moved or deleted; roll back the same way you shipped — a rollba
 
 ## Current release readiness
 
-As of this document (see the accompanying `docs/log/` entry for the run):
-`bats` = 204/204 passing, `shellcheck` = clean, manifests = valid. The toolkit
-is at release-worthy quality; use the checklist above for each ship.
+Readiness is not a standing fact recorded here — re-establish it on every
+release by running the §3 gate (`bats`, `shellcheck`, manifest validation) and
+the checklist above. Record the run's results in that release's `docs/log/`
+entry, not in this document, so no number here can go stale.

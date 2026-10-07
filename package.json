@@ -1,6 +1,6 @@
 {
   "name": "ganpan",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "description": "GitHub-native agent orchestration toolkit — engine installer and validator for the ganpan-* agent skills.",
   "private": true,
   "type": "module",

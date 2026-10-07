@@ -171,6 +171,33 @@ fill_config() {
   [[ "$output" == *"ok   config $T/.claude/orchestration.json"* ]]
 }
 
+@test "validate: .ganpan and .claude configs that differ -> warn (.ganpan wins), still exit 0" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  mkdir -p "$T/.claude"
+  jq '.repo = "acme/other" | .bot = "other-bot"' "$T/.ganpan/orchestration.json" > "$T/.claude/orchestration.json"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"warn both .ganpan/orchestration.json and .claude/orchestration.json exist and differ; using .ganpan"* ]]
+  [[ "$output" == *"repo acme/widgets"* ]]
+}
+
+@test "validate: identical .ganpan and .claude configs -> no duplicate-config warn" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  mkdir -p "$T/.claude"; cp "$T/.ganpan/orchestration.json" "$T/.claude/orchestration.json"
+  run node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"exist and differ"* ]]
+}
+
+@test "validate: ORCH_CONFIG set -> no duplicate-config warn even if both files differ" {
+  T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"; fill_config "$T"
+  mkdir -p "$T/.claude"
+  jq '.repo = "acme/other"' "$T/.ganpan/orchestration.json" > "$T/.claude/orchestration.json"
+  run env ORCH_CONFIG="$T/.ganpan/orchestration.json" node "$CLI" validate "$T"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"exist and differ"* ]]
+}
+
 @test "validate: absolute ORCH_CONFIG wins over .ganpan" {
   T="$BATS_TEST_TMPDIR/t"; install_fresh "$T"          # .ganpan config keeps placeholders
   jq '.repo = "acme/alt" | .bot = "alt-bot"' "$T/.ganpan/orchestration.json" > "$BATS_TEST_TMPDIR/alt.json"

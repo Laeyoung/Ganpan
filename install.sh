@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./install.sh <target-repo-path> [--target claude|codex|antigravity|both|all] [--force]
+#   ./install.sh . --self      # (ganpan checkout only) refresh its own dogfood engine copy
 #
 # Copies the portable toolkit (scripts, lane commands, labels, issue template,
 # setup docs) into <target-repo-path>. Repo-specific files are handled safely:
@@ -13,6 +14,12 @@
 #
 # After running, edit the printed config path (repo, bot) and follow the printed
 # next steps (see <target>/docs/SETUP.md).
+#
+# --self: the toolkit source refuses itself as a target unless this flag is given.
+# Self mode refreshes only the version-stamped engine payload (scripts/orchestration,
+# references/lanes, and .claude/commands for claude targets) — never config, assets,
+# docs, CLAUDE.md/AGENTS.md, or .agents/skills, which in a checkout are tracked dev
+# files (or, for a root .agents/skills, would shadow `npx skills` discovery).
 
 set -euo pipefail
 
@@ -43,10 +50,12 @@ SENTINEL_TOKEN="ganpan-orchestration: v$VERSION"
 # --- args ---------------------------------------------------------------------
 TARGET=""
 FORCE=""
+SELF=""
 TARGET_MODE="claude"
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --force) FORCE=1 ;;
+    --self) SELF=1 ;;
     --target)
       shift
       [ "$#" -gt 0 ] || die "--target requires claude, codex, antigravity, both, or all"
@@ -69,13 +78,18 @@ esac
 [ -n "$TARGET" ] || die "usage: ./install.sh <target-repo-path>"
 [ -d "$TARGET" ] || die "target is not a directory: $TARGET"
 TARGET="$(cd "$TARGET" && pwd)"
-[ "$TARGET" = "$SRC" ] && die "target must differ from the toolkit source ($SRC)"
+if [ "$TARGET" = "$SRC" ]; then
+  [ -n "$SELF" ] || die "target must differ from the toolkit source ($SRC); to refresh this checkout's own dogfood engine copy, pass --self"
+elif [ -n "$SELF" ]; then
+  die "--self only applies when the target is the toolkit source itself ($SRC)"
+fi
 [ -d "$TARGET/.git" ] || printf 'warning: %s has no .git — sure this is a repo root?\n' "$TARGET" >&2
 
 echo "Installing orchestration toolkit"
 echo "  from: $SRC"
 echo "  into: $TARGET"
 echo "  target: $TARGET_MODE"
+[ -n "$SELF" ] && echo "  mode:   self (engine payload only)"
 echo
 
 wants_claude() { [ "$TARGET_MODE" = "claude" ] || [ "$TARGET_MODE" = "both" ] || [ "$TARGET_MODE" = "all" ]; }
@@ -87,42 +101,45 @@ wants_agents_payload() { wants_codex || wants_antigravity; }
 
 # --- 1. assets (plain "if absent" guard; not sentinel-stamped) ----------------
 echo "Copying files:"
-mkdir -p "$TARGET/scripts/orchestration" "$TARGET/.github/ISSUE_TEMPLATE"
+mkdir -p "$TARGET/scripts/orchestration"
 wants_claude && mkdir -p "$TARGET/.claude/commands"
-[ -f "$TARGET/.github/labels.yml" ]             || cp "$PLUGIN/assets/labels.yml" "$TARGET/.github/labels.yml"
-[ -f "$TARGET/.github/ISSUE_TEMPLATE/task.yml" ] || cp "$PLUGIN/assets/task.yml" "$TARGET/.github/ISSUE_TEMPLATE/task.yml"
-if [ -f "$TARGET/.ganpan/orchestration.json" ] && [ -f "$TARGET/.claude/orchestration.json" ] \
-  && ! cmp -s "$TARGET/.ganpan/orchestration.json" "$TARGET/.claude/orchestration.json"; then
-  printf 'warning: both .ganpan/orchestration.json and .claude/orchestration.json exist and differ; .ganpan wins\n' >&2
-fi
-if [ ! -f "$TARGET/.ganpan/orchestration.json" ] && [ ! -f "$TARGET/.claude/orchestration.json" ]; then
-  case "$TARGET_MODE" in
-    claude)
-      mkdir -p "$TARGET/.claude"
-      cp "$PLUGIN/assets/orchestration.json" "$TARGET/.claude/orchestration.json"
-      ;;
-    codex|both|antigravity|all)
-      mkdir -p "$TARGET/.ganpan"
-      cp "$PLUGIN/assets/orchestration.json" "$TARGET/.ganpan/orchestration.json"
-      ;;
-  esac
-fi
-SELECTED_CONFIG_PATH=""
-if [ -f "$TARGET/.ganpan/orchestration.json" ]; then
-  SELECTED_CONFIG_PATH=".ganpan/orchestration.json"
-elif [ -f "$TARGET/.claude/orchestration.json" ]; then
-  SELECTED_CONFIG_PATH=".claude/orchestration.json"
-fi
-LEGACY_CONFIG_FALLBACK=""
-if wants_agents_payload && [ "$SELECTED_CONFIG_PATH" = ".claude/orchestration.json" ]; then
-  LEGACY_CONFIG_FALLBACK=1
-fi
-mkdir -p "$TARGET/docs"
-[ -f "$TARGET/docs/SETUP.md" ]                  || cp "$SRC/docs/SETUP.md" "$TARGET/docs/SETUP.md"
-info ".github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, orchestration config, docs/SETUP.md (if absent)"
-if [ -n "$LEGACY_CONFIG_FALLBACK" ]; then
-  info "Using legacy .claude/orchestration.json as the selected config fallback"
-  info "To migrate later, create .ganpan/orchestration.json deliberately"
+if [ -z "$SELF" ]; then
+  mkdir -p "$TARGET/.github/ISSUE_TEMPLATE"
+  [ -f "$TARGET/.github/labels.yml" ]             || cp "$PLUGIN/assets/labels.yml" "$TARGET/.github/labels.yml"
+  [ -f "$TARGET/.github/ISSUE_TEMPLATE/task.yml" ] || cp "$PLUGIN/assets/task.yml" "$TARGET/.github/ISSUE_TEMPLATE/task.yml"
+  if [ -f "$TARGET/.ganpan/orchestration.json" ] && [ -f "$TARGET/.claude/orchestration.json" ] \
+    && ! cmp -s "$TARGET/.ganpan/orchestration.json" "$TARGET/.claude/orchestration.json"; then
+    printf 'warning: both .ganpan/orchestration.json and .claude/orchestration.json exist and differ; .ganpan wins\n' >&2
+  fi
+  if [ ! -f "$TARGET/.ganpan/orchestration.json" ] && [ ! -f "$TARGET/.claude/orchestration.json" ]; then
+    case "$TARGET_MODE" in
+      claude)
+        mkdir -p "$TARGET/.claude"
+        cp "$PLUGIN/assets/orchestration.json" "$TARGET/.claude/orchestration.json"
+        ;;
+      codex|both|antigravity|all)
+        mkdir -p "$TARGET/.ganpan"
+        cp "$PLUGIN/assets/orchestration.json" "$TARGET/.ganpan/orchestration.json"
+        ;;
+    esac
+  fi
+  SELECTED_CONFIG_PATH=""
+  if [ -f "$TARGET/.ganpan/orchestration.json" ]; then
+    SELECTED_CONFIG_PATH=".ganpan/orchestration.json"
+  elif [ -f "$TARGET/.claude/orchestration.json" ]; then
+    SELECTED_CONFIG_PATH=".claude/orchestration.json"
+  fi
+  LEGACY_CONFIG_FALLBACK=""
+  if wants_agents_payload && [ "$SELECTED_CONFIG_PATH" = ".claude/orchestration.json" ]; then
+    LEGACY_CONFIG_FALLBACK=1
+  fi
+  mkdir -p "$TARGET/docs"
+  [ -f "$TARGET/docs/SETUP.md" ]                  || cp "$SRC/docs/SETUP.md" "$TARGET/docs/SETUP.md"
+  info ".github/labels.yml, .github/ISSUE_TEMPLATE/task.yml, orchestration config, docs/SETUP.md (if absent)"
+  if [ -n "$LEGACY_CONFIG_FALLBACK" ]; then
+    info "Using legacy .claude/orchestration.json as the selected config fallback"
+    info "To migrate later, create .ganpan/orchestration.json deliberately"
+  fi
 fi
 
 # --- sentinel helpers ---------------------------------------------------------
@@ -175,7 +192,9 @@ if wants_claude; then
 fi
 
 # --- 5. Codex/Antigravity skills (shared agents-skills payload) ----------------
-if wants_agents_payload; then
+if wants_agents_payload && [ -n "$SELF" ]; then
+  info "skipped .agents/skills (self mode: a root copy would shadow npx skills discovery)"
+elif wants_agents_payload; then
   [ -d "$CODEX_PLUGIN/skills" ] || die "Codex skill source not found: $CODEX_PLUGIN/skills"
   while IFS= read -r src; do
     rel="${src#"$CODEX_PLUGIN/skills/"}"
@@ -190,6 +209,12 @@ fi
 # Note: CLAUDE.md is merge-managed (append-once under its own sentinel), NOT
 # version-stamped — `--force` deliberately does not rewrite it (spec §3.5); a
 # user editing conventions text upstream merges them manually.
+if [ -n "$SELF" ]; then
+  echo
+  echo "Done. Dogfood engine copy is now v$VERSION (CLAUDE.md/AGENTS.md, config, and assets untouched)."
+  exit 0
+fi
+
 echo
 if wants_claude; then
   echo "Conventions (CLAUDE.md):"

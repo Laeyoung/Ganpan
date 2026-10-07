@@ -42,6 +42,22 @@ function fail(msg) {
 // Template placeholders shipped in plugins/orchestration/assets/orchestration.json.
 const PLACEHOLDERS = { repo: 'owner/repo', bot: 'bot-login' };
 
+// warnIfLegacyConfigDiffers — .ganpan wins over the legacy .claude config, so a divergent
+// .claude copy is silently ignored by the engine; surface it (as install.sh does). Byte
+// comparison mirrors install.sh's `cmp -s`. An unreadable file is left to the main read,
+// which reports it.
+function warnIfLegacyConfigDiffers(root, report) {
+  const legacy = join(root, '.claude/orchestration.json');
+  if (!existsSync(legacy)) return;
+  try {
+    if (!readFileSync(join(root, '.ganpan/orchestration.json')).equals(readFileSync(legacy))) {
+      report('warn', 'both .ganpan/orchestration.json and .claude/orchestration.json exist and differ; using .ganpan');
+    }
+  } catch {
+    // fall through: checkConfig reports the read error for the selected config
+  }
+}
+
 // checkConfig — mirror lib.sh resolve_config_path order ($ORCH_CONFIG → .ganpan → .claude),
 // but pin the root to `root`: a relative $ORCH_CONFIG is resolved against the target
 // repo, because lanes always run from the repo root. No fallback when $ORCH_CONFIG is
@@ -50,8 +66,10 @@ function checkConfig(root, report) {
   const fromEnv = process.env.ORCH_CONFIG;
   let rel;
   if (fromEnv) rel = fromEnv;
-  else if (existsSync(join(root, '.ganpan/orchestration.json'))) rel = '.ganpan/orchestration.json';
-  else if (existsSync(join(root, '.claude/orchestration.json'))) rel = '.claude/orchestration.json';
+  else if (existsSync(join(root, '.ganpan/orchestration.json'))) {
+    rel = '.ganpan/orchestration.json';
+    warnIfLegacyConfigDiffers(root, report);
+  } else if (existsSync(join(root, '.claude/orchestration.json'))) rel = '.claude/orchestration.json';
   else return report('FAIL', `config missing: .ganpan/orchestration.json (or legacy .claude/orchestration.json) — run \`${npxCmd('init')}\``);
 
   const path = isAbsolute(rel) ? rel : join(root, rel);
