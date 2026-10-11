@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ganpan Demo</title>
+<meta name="description" content="Ganpan(간판) 개념 시뮬레이션 — GitHub Issues·PR·라벨을 상태 머신으로 삼아 Triager → Coder → Reviewer → QA 에이전트 레인이 협업하는 모습을 보여줍니다. 실제 GitHub에는 연결되지 않습니다.">
+<style>
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c2129;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --faint: #6e7681;
+  --accent: #2f81f7;
+  --triager: #a78bfa;
+  --coder: #60a5fa;
+  --reviewer: #f5a524;
+  --qa: #34d399;
+  --human: #f472b6;
+  --danger: #f85149;
+  --ok: #3fb950;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", Helvetica, Arial, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 var(--sans);
+  overflow: hidden;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+
+/* ---------- layout ---------- */
+.app {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr minmax(200px, 30%);
+  height: 100vh;
+  gap: 10px;
+  padding: 10px 16px 14px;
+}
+
+/* ---------- header ---------- */
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 18px; letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.logo-mark {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--triager), var(--coder) 40%, var(--reviewer) 70%, var(--qa));
+  color: #0d1117; font-size: 16px; font-weight: 800;
+}
+.logo small { font-weight: 500; color: var(--muted); font-size: 13px; }
+.repo {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+  white-space: nowrap;
+}
+.sim-badge {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: #f0b72f; border: 1px solid #6c5313; background: #2b2109;
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+}
+.spacer { flex: 1; }
+.chapter { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.chapter b { color: var(--text); font-weight: 600; }
+.controls { display: flex; gap: 6px; }
+.btn {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 11px; font-size: 12px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: #238636; border-color: #2ea043; color: #fff; font-weight: 600; }
+.btn.on { border-color: var(--accent); color: #fff; }
+.progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: -4px; }
+.progress > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--triager), var(--coder), var(--reviewer), var(--qa)); transition: width .6s ease; }
+
+/* ---------- caption ---------- */
+.caption {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 16px; min-height: 52px;
+}
+.caption .who {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+  background: #21262d; color: var(--muted);
+}
+.caption .text { font-size: 16px; font-weight: 500; transition: opacity .25s; }
+.caption .text code { font-family: var(--mono); font-size: 14px; background: #21262d; padding: 1px 6px; border-radius: 4px; }
+
+/* ---------- board ---------- */
+.board {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  min-height: 0;
+}
+.col {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+}
+.col.blocked { background: #1a1416; border-color: #4a2a30; }
+.col-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 10px 7px; border-bottom: 1px solid var(--border);
+}
+.col-head .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.col-head .name { font-family: var(--mono); font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.col-head .count { margin-left: auto; color: var(--muted); font-size: 11px; background: #21262d; border-radius: 999px; padding: 0 7px; }
+.col-sub { color: var(--faint); font-size: 10.5px; padding: 4px 10px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cards { padding: 7px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow: hidden; }
+.board.animating .cards { overflow: visible; }
+.card.moving { z-index: 5; }
+
+.card {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 8px; position: relative;
+  transition: box-shadow .3s, border-color .3s, opacity .3s;
+}
+.card.enter { animation: enter .45s ease both; }
+@keyframes enter { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
+.card .top { display: flex; align-items: baseline; gap: 6px; }
+.card .num { font-family: var(--mono); color: var(--muted); font-size: 11px; flex: none; }
+.card .title { font-size: 12.5px; font-weight: 600; line-height: 1.3; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.chip {
+  font-size: 10.5px; line-height: 16px; padding: 0 6px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+  font-family: var(--mono);
+}
+.chip.pr { color: #a5d6ff; border-color: #1f4a7a; background: #0c2d55; }
+.chip.lock { color: var(--coder); border-color: #1f3b63; }
+.chip.decision { color: #ffd37a; border-color: #6c5313; background: #2b2109; }
+.chip.merged { color: #d2a8ff; border-color: #4c2889; background: #271052; }
+.chip.fail { color: #ffa198; border-color: #6e2a26; background: #3a1210; }
+.chip.ok { color: #7ee2a8; border-color: #1f5133; background: #0f2a1b; }
+.chip.followup { color: var(--triager); border-color: #45307a; }
+.card.glow-triager  { border-color: var(--triager);  box-shadow: 0 0 0 1px var(--triager), 0 0 18px -4px var(--triager); }
+.card.glow-coder    { border-color: var(--coder);    box-shadow: 0 0 0 1px var(--coder), 0 0 18px -4px var(--coder); }
+.card.glow-reviewer { border-color: var(--reviewer); box-shadow: 0 0 0 1px var(--reviewer), 0 0 18px -4px var(--reviewer); }
+.card.glow-qa       { border-color: var(--qa);       box-shadow: 0 0 0 1px var(--qa), 0 0 18px -4px var(--qa); }
+.card.glow-human    { border-color: var(--human);    box-shadow: 0 0 0 1px var(--human), 0 0 18px -4px var(--human); }
+.card.dim { opacity: .55; }
+
+/* ---------- bottom panels ---------- */
+.bottom {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1.1fr;
+  gap: 10px;
+  min-height: 0;
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--muted);
+}
+.panel-head .tl { display: flex; gap: 5px; }
+.panel-head .tl i { width: 10px; height: 10px; border-radius: 50%; background: #3d444d; display: block; }
+
+.term {
+  font-family: var(--mono); font-size: 12px; line-height: 1.55;
+  padding: 8px 12px; overflow: hidden; flex: 1;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: #0a0d12;
+}
+.term div { white-space: pre-wrap; word-break: break-word; animation: fadein .25s ease; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+.term .p { color: var(--text); }
+.term .p::before { content: "❯ "; color: var(--qa); }
+.term .i { color: var(--muted); }
+.term .ok { color: var(--ok); }
+.term .w { color: #f0b72f; }
+.term .e { color: var(--danger); }
+.term .t-triager { color: var(--triager); }
+.term .t-coder { color: var(--coder); }
+.term .t-reviewer { color: var(--reviewer); }
+.term .t-qa { color: var(--qa); }
+
+.agents { padding: 8px; display: grid; grid-template-rows: repeat(5, 1fr); gap: 6px; flex: 1; min-height: 0; }
+.agent {
+  display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px;
+  background: var(--panel-2); transition: border-color .3s, background .3s; min-height: 0;
+}
+.agent .av {
+  width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
+  font-weight: 800; font-size: 12px; color: #0d1117;
+}
+.agent .nm { font-weight: 600; font-size: 12.5px; line-height: 1.3; display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+.agent .nm code { font-family: var(--mono); font-weight: 400; color: var(--faint); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+.agent .doing { color: var(--muted); font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent .st { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); display: flex; align-items: center; gap: 5px; }
+.agent .st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3d444d; }
+.agent.work .st { color: var(--text); }
+.agent.work .st::before { background: var(--c); box-shadow: 0 0 8px var(--c); animation: pulse 1s infinite; }
+.agent.work { border-color: color-mix(in srgb, var(--c) 55%, var(--border)); background: color-mix(in srgb, var(--c) 7%, var(--panel-2)); }
+.agent.wait .st { color: var(--human); }
+.agent.wait .st::before { background: var(--human); animation: pulse .8s infinite; }
+.agent.wait { border-color: var(--human); }
+@keyframes pulse { 50% { opacity: .35; } }
+
+.feed { padding: 6px 12px; overflow: hidden; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 0; }
+.ev { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 4px 0; border-bottom: 1px solid #21262d; animation: fadein .3s ease; font-size: 12px; }
+.ev:last-child { border-bottom: 0; }
+.ev .av { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #0d1117; margin-top: 1px; }
+.ev b { font-weight: 600; }
+.ev .lbl { font-family: var(--mono); font-size: 10.5px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); white-space: nowrap; }
+.ev .muted { color: var(--muted); }
+
+/* ---------- decision modal ---------- */
+.scrim {
+  position: fixed; inset: 0; background: rgba(1, 4, 9, .55);
+  display: none; align-items: center; justify-content: center; z-index: 20;
+}
+.scrim.show { display: flex; animation: fadein .25s ease; }
+.modal {
+  width: min(560px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--human);
+  border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); overflow: hidden;
+}
+.modal-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.modal-head .tag { color: var(--human); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.modal-head .ttl { font-weight: 600; font-size: 14px; }
+.modal-body { padding: 14px 16px; }
+.modal-body p { margin: 0 0 12px; color: var(--muted); }
+.modal-body .q { color: var(--text); font-size: 14px; margin-bottom: 12px; }
+.opts { display: flex; flex-direction: column; gap: 8px; }
+.opt {
+  text-align: left; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; transition: border-color .2s, background .2s, transform .1s;
+}
+.opt:hover, .opt.hot { border-color: var(--human); background: #2a1825; }
+.opt.pressed { transform: scale(.98); }
+.opt b { display: block; font-size: 13px; }
+.opt span { color: var(--muted); font-size: 12px; }
+.modal-foot { padding: 8px 16px 12px; color: var(--faint); font-size: 11px; }
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 30; display: none;
+  align-items: center; justify-content: center; flex-direction: column; text-align: center;
+  background: radial-gradient(ellipse at center, rgba(22,27,34,.96), rgba(13,17,23,.985));
+  backdrop-filter: blur(8px);
+  padding: 24px;
+}
+.overlay.show { display: flex; animation: fadein .5s ease; }
+.overlay .big { font-size: 56px; font-weight: 800; letter-spacing: -0.02em; display: flex; align-items: center; gap: 18px; }
+.overlay .big .logo-mark { width: 64px; height: 64px; font-size: 34px; border-radius: 14px; }
+.overlay .sub { font-size: 22px; color: var(--muted); margin-top: 14px; max-width: 1120px; }
+.overlay .flow { margin-top: 30px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.overlay .flow span { font-family: var(--mono); font-size: 15px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); }
+.overlay .flow em { color: var(--faint); font-style: normal; }
+.overlay .note { margin-top: 26px; font-size: 13px; color: #f0b72f; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 14px; margin-top: 30px; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.stat .n { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.stat.key { border-color: var(--qa); }
+.stat.key .n { color: var(--qa); }
+.overlay .cta { margin-top: 30px; font-family: var(--mono); font-size: 15px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; }
+.overlay .cta b { color: var(--qa); font-weight: 400; }
+.overlay .start { margin-top: 30px; font-size: 15px; padding: 10px 22px; }
+
+/* fake cursor for autoplay "human" clicks */
+.cursor {
+  position: fixed; z-index: 40; width: 22px; height: 22px; pointer-events: none;
+  left: 0; top: 0; opacity: 0;
+  transition: left .7s cubic-bezier(.4,.1,.2,1), top .7s cubic-bezier(.4,.1,.2,1), opacity .3s;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.6));
+}
+.cursor.click::after {
+  content: ""; position: absolute; left: -9px; top: -9px; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--human); animation: ripple .45s ease-out;
+}
+@keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .app { height: auto; grid-template-rows: auto; padding: 10px 16px; }
+  header { flex-wrap: wrap; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .col { min-height: 120px; }
+  .bottom { grid-template-columns: 1fr; }
+  .panel { height: 260px; }
+  .overlay .big { font-size: 36px; }
+  .overlay .sub { font-size: 16px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo"><div class="logo-mark">看</div>Ganpan <small>간판</small></div>
+    <span class="repo">acme/storefront</span>
+    <span class="sim-badge" data-i18n="badge">SIMULATION · 실제 GitHub 미연결</span>
+    <div class="spacer"></div>
+    <div class="chapter" id="chapter"></div>
+    <div class="controls">
+      <button class="btn primary" id="playBtn">▶ Play</button>
+      <button class="btn" id="speedBtn">1×</button>
+      <button class="btn" id="restartBtn" data-i18n="restart">↺ 처음부터</button>
+      <button class="btn" id="langBtn">EN</button>
+    </div>
+  </header>
+  <div class="progress"><i id="progress"></i></div>
+
+  <div class="caption">
+    <span class="who" id="capWho">ganpan</span>
+    <span class="text" id="capText"></span>
+  </div>
+
+  <section class="board" id="board"></section>
+
+  <section class="bottom">
+    <div class="panel">
+      <div class="panel-head"><span class="tl"><i></i><i></i><i></i></span><span>claude — acme/storefront</span></div>
+      <div class="term" id="term"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head" data-i18n="lanes">에이전트 레인</div>
+      <div class="agents" id="agents"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head" data-i18n="activity">GitHub 활동</div>
+      <div class="feed" id="feed"></div>
+    </div>
+  </section>
+</div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="modal-head"><span class="tag" id="mTag">status:needs-decision</span><span class="ttl" id="mTitle"></span></div>
+    <div class="modal-body">
+      <p id="mDesc"></p>
+      <div class="q" id="mQ"></div>
+      <div class="opts" id="mOpts"></div>
+    </div>
+    <div class="modal-foot" id="mFoot"></div>
+  </div>
+</div>
+
+<div class="overlay" id="intro">
+  <div class="big"><div class="logo-mark">看</div>Ganpan</div>
+  <div class="sub" id="introSub"></div>
+  <div class="flow">
+    <span style="border-color:var(--triager)">Triager</span><em>→</em>
+    <span style="border-color:var(--coder)">Coder</span><em>→</em>
+    <span style="border-color:var(--reviewer)">Reviewer</span><em>→</em>
+    <span style="border-color:var(--qa)">QA</span>
+  </div>
+  <div class="note" id="introNote"></div>
+  <button class="btn primary start" id="startBtn">▶ Start demo</button>
+</div>
+
+<div class="overlay" id="outro">
+  <div class="big"><div class="logo-mark">看</div>Ganpan</div>
+  <div class="sub" id="outroSub"></div>
+  <div class="stats" id="stats"></div>
+  <div class="cta">/plugin marketplace add <b>Laeyoung/Ganpan</b> &nbsp;·&nbsp; npx skills add <b>Laeyoung/Ganpan</b></div>
+  <button class="btn start" id="againBtn">↺ Replay</button>
+</div>
+
+<svg class="cursor" id="cursor" viewBox="0 0 24 24"><path d="M4 2l16 10-7 1.5L9.5 21z" fill="#fff" stroke="#0d1117" stroke-width="1.5" stroke-linejoin="round"/></svg>
+
+<script>
+"use strict";
+/* ============================================================
+   Ganpan demo — a scripted, offline simulation. Nothing here
+   talks to GitHub; every event below is canned.
+   URL params: ?autoplay=1  start immediately, auto-answer humans
+               ?lang=en     English captions
+               ?speed=2     playback speed
+   ============================================================ */
+const params = new URLSearchParams(location.search);
+const AUTOPLAY = params.get("autoplay") === "1";
+let lang = params.get("lang") === "en" ? "en" : "ko";
+let speed = Number(params.get("speed")) || 1;
+const tr = (ko, en) => (lang === "en" ? en : ko);
+
+const UI = {
+  badge: ["SIMULATION · 실제 GitHub 미연결", "SIMULATION · not connected to GitHub"],
+  restart: ["↺ 처음부터", "↺ Restart"],
+  lanes: ["에이전트 레인", "Agent lanes"],
+  activity: ["GitHub 활동", "GitHub activity"],
+};
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = UI[el.dataset.i18n][lang === "en" ? 1 : 0]; });
+  $("#langBtn").textContent = lang === "en" ? "한국어" : "EN";
+  $("#introSub").innerHTML = tr(
+    "GitHub Issues · PR · 라벨이 곧 작업 보드입니다.<br>여러 AI 에이전트가 <code>status:*</code> 라벨을 보고 자기 일을 집어 갑니다 — 별도의 큐도, DB도 없이.",
+    "GitHub Issues, PRs and labels <i>are</i> the work board.<br>AI agents pick up work by reading <code>status:*</code> labels — no extra queue, no database.");
+  $("#introNote").textContent = tr("이 페이지는 개념 시뮬레이션입니다 — 실제 GitHub에 연결되지 않습니다.", "This page is a conceptual simulation — it does not connect to GitHub.");
+  $("#outroSub").innerHTML = tr(
+    "레인은 라벨만 보고 협업합니다. 에이전트는 PR을 <b>승인하지 않으며</b>, 판단이 필요한 순간에는 사람에게 묻습니다.",
+    "Lanes coordinate through labels alone. Agents <b>never approve</b> PRs, and they ask a human whenever judgment is needed.");
+  renderAgents();
+}
+const $ = s => document.querySelector(s);
+
+/* ---------------- board model ---------------- */
+const COLS = [
+  { key: "triage",   label: "status:triage",      color: "#a78bfa", sub: ["분류 대기", "awaiting triage"] },
+  { key: "ready",    label: "status:agent-ready", color: "#2f81f7", sub: ["에이전트 작업 큐", "agent work queue"] },
+  { key: "progress", label: "status:in-progress", color: "#60a5fa", sub: ["워커 작업 중 (락)", "worker holds the lock"] },
+  { key: "review",   label: "status:in-review",   color: "#f5a524", sub: ["PR 리뷰 대기", "PR awaiting review"] },
+  { key: "qa",       label: "status:qa",          color: "#2dd4bf", sub: ["머지됨 · QA 대기", "merged · awaiting QA"] },
+  { key: "done",     label: "status:done",        color: "#3fb950", sub: ["완료", "done"] },
+  { key: "blocked",  label: "status:blocked",     color: "#f85149", sub: ["사람 개입 필요", "needs a human"] },
+];
+const AGENTS = [
+  { key: "triager",  name: "Triager",  cmd: "/ganpan:triage",       c: "var(--triager)",  ch: "T" },
+  { key: "coder",    name: "Coder",    cmd: "/ganpan:work-issue",   c: "var(--coder)",    ch: "C" },
+  { key: "reviewer", name: "Reviewer", cmd: "/ganpan:review-queue", c: "var(--reviewer)", ch: "R" },
+  { key: "qa",       name: "QA",       cmd: "/ganpan:qa-check",     c: "var(--qa)",       ch: "Q" },
+  { key: "human",    name: "You",      cmd: "maintainer",           c: "var(--human)",    ch: "Y" },
+];
+const ISSUES = {
+  101: ["설정에 다크 모드 토글 추가", "Add dark-mode toggle to settings", "feature"],
+  102: ["/api/orders 페이지네이션 off-by-one 수정", "Fix pagination off-by-one in /api/orders", "bug"],
+  103: ["인증을 OAuth2로 마이그레이션", "Migrate auth to OAuth2", "feature"],
+  104: ["CSV export 엔드포인트에 rate limit", "Rate-limit the CSV export endpoint", "feature"],
+  105: ["온보딩 메일 오타 수정", "Fix typo in onboarding email", "chore"],
+  106: ["주문 CSV에 통화 컬럼 추가", "Add currency column to orders CSV", "feature"],
+  107: ["rate limit 설정값 문서화", "Document the rate-limit setting", "docs"],
+};
+
+let cards = {};       // id -> { col, chips: [] }
+let agentState = {};  // key -> { st, doing }
+let stats = { done: 0, prs: 0, human: 0, approvals: 0 };
+
+function buildBoard() {
+  const board = $("#board");
+  board.innerHTML = "";
+  for (const c of COLS) {
+    const col = document.createElement("div");
+    col.className = "col" + (c.key === "blocked" ? " blocked" : "");
+    col.innerHTML = `<div class="col-head"><span class="dot" style="background:${c.color}"></span><span class="name">${c.label}</span><span class="count" data-count="${c.key}">0</span></div>
+      <div class="col-sub" data-sub="${c.key}"></div><div class="cards" data-col="${c.key}"></div>`;
+    board.appendChild(col);
+  }
+  refreshColSubs();
+}
+function refreshColSubs() {
+  for (const c of COLS) { const el = document.querySelector(`[data-sub="${c.key}"]`); if (el) el.textContent = c.sub[lang === "en" ? 1 : 0]; }
+}
+function updateCounts() {
+  for (const c of COLS) document.querySelector(`[data-count="${c.key}"]`).textContent = document.querySelector(`[data-col="${c.key}"]`).children.length;
+}
+function cardHTML(id) {
+  const [ko, en, type] = ISSUES[id];
+  const chips = cards[id].chips.map(ch => `<span class="chip ${ch[0]}">${ch[1]}</span>`).join("");
+  return `<div class="top"><span class="num">#${id}</span><span class="title">${lang === "en" ? en : ko}</span></div>
+    <div class="meta"><span class="chip">${type}</span>${chips}</div>`;
+}
+function renderCard(id) { const el = document.getElementById("card-" + id); if (el) el.innerHTML = cardHTML(id); }
+function addCard(id, col, chips = []) {
+  cards[id] = { col, chips };
+  const el = document.createElement("div");
+  el.className = "card enter";
+  el.id = "card-" + id;
+  el.innerHTML = cardHTML(id);
+  document.querySelector(`[data-col="${col}"]`).appendChild(el);
+  updateCounts();
+}
+function setChips(id, chips) { cards[id].chips = chips; renderCard(id); }
+function addChip(id, chip) { cards[id].chips = cards[id].chips.filter(c => c[1] !== chip[1]).concat([chip]); renderCard(id); }
+function dropChip(id, cls) { cards[id].chips = cards[id].chips.filter(c => c[0] !== cls); renderCard(id); }
+
+/* FLIP move between columns */
+function moveCard(id, col) {
+  const el = document.getElementById("card-" + id);
+  const all = [...document.querySelectorAll(".card")];
+  const before = new Map(all.map(c => [c, c.getBoundingClientRect()]));
+  el.classList.remove("enter");
+  document.querySelector(`[data-col="${col}"]`).appendChild(el);
+  cards[id].col = col;
+  for (const c of all) {
+    const a = before.get(c), b = c.getBoundingClientRect();
+    const dx = a.left - b.left, dy = a.top - b.top;
+    if (!dx && !dy) continue;
+    if (c === el) {
+      const board = $("#board");
+      el.classList.add("moving"); board.classList.add("animating");
+      clearTimeout(moveCard.t);
+      moveCard.t = setTimeout(() => { el.classList.remove("moving"); board.classList.remove("animating"); }, 700 / Math.min(speed, 2));
+    }
+    c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+      { duration: (c === el ? 650 : 350) / Math.min(speed, 2), easing: "cubic-bezier(.3,.1,.2,1)" });
+  }
+  updateCounts();
+}
+function glow(id, who) {
+  const el = document.getElementById("card-" + id);
+  el.classList.remove("glow-triager", "glow-coder", "glow-reviewer", "glow-qa", "glow-human");
+  if (who) el.classList.add("glow-" + who);
+}
+
+/* ---------------- agents / terminal / feed ---------------- */
+function renderAgents() {
+  const box = $("#agents");
+  box.innerHTML = AGENTS.map(a => {
+    const s = agentState[a.key] || { st: "idle", doing: "" };
+    const stLabel = { idle: tr("대기", "idle"), work: tr("작업 중", "working"), wait: tr("결정 필요", "decide") }[s.st];
+    const doing = s.doing || (a.key === "human" ? tr("결정이 필요할 때만 호출됩니다", "only paged when judgment is needed") : tr("다음 스윕 대기", "waiting for next sweep"));
+    return `<div class="agent ${s.st}" style="--c:${a.c}">
+      <div class="av" style="background:${a.c}">${a.ch}</div>
+      <div style="min-width:0"><div class="nm">${a.name} <code>${a.cmd}</code></div><div class="doing">${doing}</div></div>
+      <div class="st">${stLabel}</div></div>`;
+  }).join("");
+}
+function agent(key, st, doing = "") { agentState[key] = { st, doing }; renderAgents(); }
+
+function term(cls, text) {
+  const t = $("#term");
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  t.appendChild(d);
+  while (t.children.length > 40) t.firstChild.remove();
+}
+const AV = { bot: ["ganpan-bot", "#8b949e", "🤖"], you: ["you", "var(--human)", "Y"] };
+function feed(who, html) {
+  const f = $("#feed");
+  const [name, color, ch] = AV[who];
+  const d = document.createElement("div");
+  d.className = "ev";
+  d.innerHTML = `<div class="av" style="background:${color}">${ch === "🤖" ? "B" : ch}</div><div><b>${name}</b> ${html}</div>`;
+  f.appendChild(d);
+  while (f.children.length > 30) f.firstChild.remove();
+}
+const lbl = (name) => {
+  const c = COLS.find(c => c.label === name);
+  return `<span class="lbl" style="border-color:${c ? c.color : "var(--border)"};color:${c ? c.color : "var(--muted)"}">${name}</span>`;
+};
+/* scenario captions: hold each one for at least CAPTION_MIN (scenario time) so it can be read */
+const CAPTION_MIN = 4500;
+let lastCaption = -Infinity;
+async function say(who, ko, en) {
+  const since = scenarioClock - lastCaption;
+  if (since < CAPTION_MIN) await wait(CAPTION_MIN - since);
+  lastCaption = scenarioClock;
+  caption(who, ko, en);
+}
+function caption(who, ko, en) {
+  const w = $("#capWho"), t = $("#capText");
+  const a = AGENTS.find(a => a.key === who);
+  w.textContent = a ? a.name : "ganpan";
+  w.style.background = a ? a.c : "#21262d";
+  w.style.color = a ? "#0d1117" : "var(--muted)";
+  t.style.opacity = 0;
+  setTimeout(() => { t.innerHTML = tr(ko, en); t.style.opacity = 1; }, 120);
+}
+
+/* ---------------- timing / playback ---------------- */
+let runId = 0, paused = true, scenarioClock = 0;
+class Abort extends Error {}
+async function wait(ms) {
+  const id = runId;
+  let left = ms;
+  while (left > 0) {
+    await new Promise(r => setTimeout(r, 50));
+    if (id !== runId) throw new Abort();
+    if (!paused) { left -= 50 * speed; scenarioClock += 50 * speed; }
+  }
+}
+let chapterIdx = 0;
+const CHAPTERS = [
+  ["백로그", "Backlog"], ["트리아지", "Triage"], ["코딩", "Coding"], ["리뷰 · 머지", "Review & merge"],
+  ["사람의 결정", "Human decision"], ["QA 실패 → 재작업", "QA fail → rework"], ["언블록", "Unblock"], ["요약", "Summary"],
+];
+function chapter(i) {
+  chapterIdx = i;
+  $("#chapter").innerHTML = `${tr("챕터", "Chapter")} ${i + 1}/${CHAPTERS.length} · <b>${tr(...CHAPTERS[i])}</b>`;
+  $("#progress").style.width = ((i + 1) / CHAPTERS.length * 100) + "%";
+}
+
+/* fake cursor + human decisions */
+async function fakeClick(el) {
+  const cur = $("#cursor");
+  const r = el.getBoundingClientRect();
+  if (cur.style.opacity !== "1") { cur.style.transition = "none"; cur.style.left = (innerWidth * .62) + "px"; cur.style.top = (innerHeight * .82) + "px"; cur.getBoundingClientRect(); cur.style.transition = ""; cur.style.opacity = 1; }
+  await wait(80);
+  cur.style.left = (r.left + r.width * .3) + "px";
+  cur.style.top = (r.top + r.height * .55) + "px";
+  await wait(800);
+  el.classList.add("hot");
+  await wait(250);
+  cur.classList.remove("click"); void cur.offsetWidth; cur.classList.add("click");
+  el.classList.add("pressed");
+  await wait(220);
+  el.classList.remove("pressed");
+}
+function hideCursor() { $("#cursor").style.opacity = 0; }
+
+async function decide({ tag, title, desc, q, options, pick }) {
+  stats.human++;
+  $("#mTag").textContent = tag;
+  $("#mTitle").textContent = title;
+  $("#mDesc").textContent = desc;
+  $("#mQ").textContent = q;
+  const box = $("#mOpts");
+  box.innerHTML = "";
+  let resolve;
+  const chosen = new Promise(r => (resolve = r));
+  options.forEach((o, i) => {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.innerHTML = `<b>${o[0]}</b><span>${o[1]}</span>`;
+    b.onclick = () => resolve(i);
+    box.appendChild(b);
+  });
+  $("#scrim").classList.add("show");
+  const id = runId;
+  let auto = AUTOPLAY ? 2600 : 9000;
+  const foot = $("#mFoot");
+  const tick = setInterval(() => {
+    if (id !== runId) { clearInterval(tick); return; }
+    foot.textContent = AUTOPLAY ? tr("데모: 사람이 직접 선택합니다", "Demo: the human makes the call")
+      : tr(`직접 골라보세요 — ${Math.ceil(auto / 1000)}초 뒤 권장안이 자동 선택됩니다`, `Pick one — the suggested option is chosen in ${Math.ceil(auto / 1000)}s`);
+  }, 200);
+  const timer = (async () => {
+    while (auto > 0) { await wait(100); auto -= 100; }
+    await fakeClick(box.children[pick]);
+    resolve(pick);
+  })().catch(() => {});
+  const i = await Promise.race([chosen, timer.then(() => chosen)]);
+  if (id !== runId) throw new Abort();
+  clearInterval(tick);
+  auto = 0;
+  await wait(250);
+  hideCursor();
+  $("#scrim").classList.remove("show");
+  if (i !== pick) term("i", tr("(데모) 이 시뮬레이션은 시나리오가 고정되어 있어 권장 경로로 계속 진행합니다.", "(demo) This simulation is scripted, so it continues down the suggested path."));
+  return i;
+}
+
+/* ============================================================
+   The scenario
+   ============================================================ */
+async function scenario() {
+  const W = wait;
+  /* --- 1. backlog --- */
+  chapter(0);
+  await say(null, "사람은 평소처럼 GitHub 이슈만 등록합니다. 새 이슈는 모두 <code>status:triage</code> 에서 시작합니다.",
+    "Humans just open GitHub issues as usual. Every new issue starts at <code>status:triage</code>.");
+  agent("human", "work", tr("이슈 6개 등록", "opening 6 issues"));
+  for (const id of [101, 102, 103, 104, 105, 106]) {
+    addCard(id, "triage");
+    feed("you", `${tr("이슈를 열었습니다", "opened")} <b>#${id}</b> ${lbl("status:triage")}`);
+    await W(420);
+  }
+  agent("human", "idle");
+  await W(1200);
+
+  term("p", "/loop 20m /ganpan:run-all");
+  await W(500);
+  term("i", tr("레인 4개를 백그라운드 에이전트로 실행합니다…", "launching 4 lanes as background agents…"));
+  term("i", "  config  .ganpan/orchestration.json  (bot: storefront-bot)");
+  await W(400);
+  term("ok", "  ✓ gh is acting as storefront-bot");
+  await say(null, "<code>/ganpan:run-all</code> 한 줄로 4개 레인이 병렬로 돕니다. 레인끼리는 대화하지 않고 <b>라벨만 보고</b> 일을 집어 갑니다.",
+    "One <code>/ganpan:run-all</code> runs all four lanes in parallel. Lanes never talk to each other — they <b>only read labels</b>.");
+  for (const a of ["triager", "coder", "reviewer", "qa"]) { agent(a, "work", tr("스윕 시작", "sweep started")); await W(250); }
+  await W(1600);
+  for (const a of ["coder", "reviewer", "qa"]) agent(a, "idle", tr("집을 일 없음 — 대기", "nothing to pick up — idle"));
+
+  /* --- 2. triage --- */
+  chapter(1);
+  await say("triager", "Triager가 먼저 고아 락을 회수하고, <code>status:triage</code> 이슈를 하나씩 분류합니다.",
+    "The Triager first reclaims orphaned locks, then classifies each <code>status:triage</code> issue.");
+  agent("triager", "work", "reclaim.sh — orphan locks");
+  term("t-triager", "[triager] reclaim.sh → 0 orphan locks");
+  await W(1200);
+  for (const id of [101, 102, 104, 105, 106]) {
+    agent("triager", "work", tr(`#${id} 분류 중`, `classifying #${id}`));
+    glow(id, "triager");
+    await W(650);
+    moveCard(id, "ready");
+    glow(id, null);
+    term("t-triager", `[triager] #${id} → agent-ready`);
+    feed("bot", `${tr("라벨 변경", "relabeled")} <b>#${id}</b> ${lbl("status:agent-ready")}`);
+    await W(380);
+  }
+  agent("triager", "work", tr("#103 분류 중", "classifying #103"));
+  glow(103, "triager");
+  await W(900);
+  await say("triager", "#103은 수용 기준이 불분명합니다. 에이전트는 추측하지 않고 <code>status:blocked</code> 로 보내 사람에게 묻습니다.",
+    "#103 has no clear acceptance criteria. Instead of guessing, the agent moves it to <code>status:blocked</code> and asks a human.");
+  moveCard(103, "blocked");
+  glow(103, null);
+  addChip(103, ["fail", tr("수용 기준 필요", "needs criteria")]);
+  term("w", "[triager] #103 → blocked: acceptance criteria missing");
+  feed("bot", `${tr("코멘트", "commented on")} <b>#103</b> <span class="muted">${tr("“완료 조건을 적어주세요 (어떤 IdP? 기존 세션 처리?)”", "“Please add acceptance criteria (which IdP? existing sessions?)”")}</span> ${lbl("status:blocked")}`);
+  agent("triager", "idle", tr("스윕 완료 · 5 ready / 1 blocked", "sweep done · 5 ready / 1 blocked"));
+  await W(2600);
+
+  /* --- 3. coding --- */
+  chapter(2);
+  await say("coder", "Coder는 <code>claim.sh</code> 로 이슈를 원자적으로 잠급니다. 이슈 하나 = 브랜치 <code>issue-&lt;n&gt;</code> = worktree 하나.",
+    "The Coder locks an issue atomically with <code>claim.sh</code>. One issue = one <code>issue-&lt;n&gt;</code> branch = one worktree.");
+  agent("coder", "work", "claim.sh");
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 105");
+  glow(105, "coder");
+  moveCard(105, "progress");
+  addChip(105, ["lock", "🔒 wt-issue-105"]);
+  feed("bot", `${tr("클레임", "claimed")} <b>#105</b> ${lbl("status:in-progress")}`);
+  await W(1100);
+  term("t-coder", "[coder] git worktree add ../wt-issue-105 -b issue-105");
+  agent("coder", "work", tr("#105 구현 중 · 테스트 실행", "#105 implementing · running tests"));
+  await W(1300);
+  term("ok", "[coder] tests: 48 passed");
+  term("t-coder", "[coder] gh pr create → PR #201  (Refs #105)");
+  dropChip(105, "lock");
+  addChip(105, ["pr", "PR #201"]);
+  moveCard(105, "review");
+  glow(105, null);
+  stats.prs++;
+  feed("bot", `${tr("PR 생성", "opened")} <b>PR #201</b> <span class="muted">fix(email): onboarding typo · Refs #105</span>`);
+  await W(700);
+
+  agent("coder", "work", "claim.sh");
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 101");
+  glow(101, "coder");
+  moveCard(101, "progress");
+  addChip(101, ["lock", "🔒 wt-issue-101"]);
+  feed("bot", `${tr("클레임", "claimed")} <b>#101</b> ${lbl("status:in-progress")}`);
+  agent("coder", "work", tr("#101 구현 중", "#101 implementing"));
+  await W(900);
+
+  /* --- 4. review & merge --- */
+  chapter(3);
+  await say("reviewer", "Reviewer가 PR #201을 리뷰합니다. 에이전트는 PR을 <b>절대 approve 하지 않습니다</b> — 기본값은 사람이 머지합니다.",
+    "The Reviewer reviews PR #201. Agents <b>never approve</b> PRs — by default a human does the merge.");
+  agent("reviewer", "work", tr("PR #201 리뷰 중", "reviewing PR #201"));
+  glow(105, "reviewer");
+  term("t-reviewer", "[reviewer] PR #201: diff 3 lines · CI green · verdict: proceed");
+  await W(1500);
+  term("t-reviewer", "[reviewer] reviewer.autoMerge=false → merge-requested");
+  addChip(105, ["decision", "merge-requested"]);
+  feed("bot", `${tr("코멘트", "commented on")} <b>PR #201</b> <span class="muted">merge-requested: ${tr("리뷰 통과, 사람 머지를 요청합니다", "review passed, requesting a human merge")}</span>`);
+  agent("reviewer", "wait", tr("사람 머지 대기 · PR #201", "waiting for human merge · PR #201"));
+  agent("human", "wait", tr("PR #201 머지 요청", "asked to merge PR #201"));
+  glow(105, "human");
+  await W(900);
+  await decide({
+    tag: "merge-requested", title: "PR #201 — fix(email): onboarding typo",
+    desc: tr("Reviewer 판정: proceed · CI 통과 · 변경 3줄. 에이전트는 승인하지 않으므로 머지는 사람의 몫입니다.",
+      "Reviewer verdict: proceed · CI green · 3 lines changed. Agents never approve, so the merge is yours."),
+    q: tr("이 PR을 머지할까요?", "Merge this PR?"),
+    options: [[tr("머지", "Merge"), tr("Squash and merge → main", "Squash and merge → main")],
+      [tr("수정 요청", "Request changes"), tr("Coder에게 재작업으로 돌려보냅니다", "Send it back to the Coder")]],
+    pick: 0,
+  });
+  agent("human", "idle");
+  dropChip(105, "decision");
+  addChip(105, ["merged", "merged"]);
+  feed("you", `${tr("머지", "merged")} <b>PR #201</b> → main`);
+  term("t-reviewer", "[reviewer] PR #201 merged → #105 status:qa");
+  moveCard(105, "qa");
+  glow(105, null);
+  agent("reviewer", "idle");
+  feed("bot", `${tr("라벨 변경", "relabeled")} <b>#105</b> ${lbl("status:qa")}`);
+  await W(800);
+
+  await say("qa", "QA는 머지된 결과를 실제로 실행해 검증하고, 통과하면 이슈를 닫습니다. <b>이슈 종료는 QA만</b> 합니다.",
+    "QA runs the merged result for real and closes the issue on a pass. <b>Only QA closes issues.</b>");
+  agent("qa", "work", tr("#105 검증 중", "verifying #105"));
+  glow(105, "qa");
+  term("t-qa", "[qa] #105: render onboarding email → spell-check ✓");
+  await W(1300);
+  addChip(105, ["ok", "QA ✓"]);
+  moveCard(105, "done");
+  glow(105, null);
+  stats.done++;
+  term("ok", "[qa] #105 → done (closed)");
+  feed("bot", `${tr("이슈 종료", "closed")} <b>#105</b> ${lbl("status:done")}`);
+  agent("qa", "idle");
+  await W(900);
+
+  await say(null, "레포에서 <code>reviewer.autoMerge: true</code> 로 opt-in 하면, CLEAN 상태의 PR은 Reviewer가 직접 머지합니다. 그래도 approve는 하지 않습니다.",
+    "Opt in with <code>reviewer.autoMerge: true</code> and the Reviewer merges CLEAN PRs itself — still without ever approving.");
+  term("i", "  .ganpan/orchestration.json: reviewer.autoMerge → true");
+  feed("you", tr("<span class=\"muted\">설정 변경</span> reviewer.autoMerge: true", "<span class=\"muted\">changed config</span> reviewer.autoMerge: true"));
+  await W(1600);
+
+  term("ok", "[coder] tests: 112 passed");
+  term("t-coder", "[coder] gh pr create → PR #202  (Refs #101)");
+  dropChip(101, "lock");
+  addChip(101, ["pr", "PR #202"]);
+  moveCard(101, "review");
+  glow(101, null);
+  stats.prs++;
+  feed("bot", `${tr("PR 생성", "opened")} <b>PR #202</b> <span class="muted">feat(settings): dark-mode toggle · Refs #101</span>`);
+  agent("coder", "work", "claim.sh");
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 104");
+  glow(104, "coder");
+  moveCard(104, "progress");
+  addChip(104, ["lock", "🔒 wt-issue-104"]);
+  agent("coder", "work", tr("#104 구현 중", "#104 implementing"));
+  await W(700);
+  agent("reviewer", "work", tr("PR #202 리뷰 중", "reviewing PR #202"));
+  glow(101, "reviewer");
+  term("t-reviewer", "[reviewer] PR #202: verdict proceed · mergeStateStatus CLEAN");
+  await W(1300);
+  term("t-reviewer", "[reviewer] auto-merge.sh → merged");
+  addChip(101, ["merged", "merged"]);
+  moveCard(101, "qa");
+  glow(101, null);
+  feed("bot", `${tr("머지", "merged")} <b>PR #202</b> → main ${lbl("status:qa")}`);
+  agent("reviewer", "idle");
+  agent("qa", "work", tr("#101 검증 중", "verifying #101"));
+  glow(101, "qa");
+  await W(1100);
+  term("t-qa", "[qa] #101: toggle persists across reload ✓ · contrast AA ✓");
+  addChip(101, ["ok", "QA ✓"]);
+  moveCard(101, "done");
+  glow(101, null);
+  stats.done++;
+  feed("bot", `${tr("이슈 종료", "closed")} <b>#101</b> ${lbl("status:done")}`);
+  agent("qa", "idle");
+  await W(800);
+
+  /* --- 5. human decision --- */
+  chapter(4);
+  term("ok", "[coder] tests: 63 passed");
+  term("t-coder", "[coder] gh pr create → PR #203  (Refs #104)");
+  dropChip(104, "lock");
+  addChip(104, ["pr", "PR #203"]);
+  moveCard(104, "review");
+  glow(104, null);
+  stats.prs++;
+  feed("bot", `${tr("PR 생성", "opened")} <b>PR #203</b> <span class="muted">feat(export): rate limit · Refs #104</span>`);
+  agent("coder", "work", "claim.sh");
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 106");
+  glow(106, "coder");
+  moveCard(106, "progress");
+  addChip(106, ["lock", "🔒 wt-issue-106"]);
+  agent("coder", "work", tr("#106 구현 중", "#106 implementing"));
+  await W(700);
+
+  agent("reviewer", "work", tr("PR #203 리뷰 중", "reviewing PR #203"));
+  glow(104, "reviewer");
+  term("t-reviewer", "[reviewer] PR #203: limit hard-coded at 10 req/min — product decision, not a code defect");
+  await W(1300);
+  await say("reviewer", "코드 결함이 아니라 <b>제품 판단</b>이 필요한 지점입니다. Reviewer는 <code>status:needs-decision</code> 을 붙이고 사람에게 선택지를 줍니다.",
+    "This is a <b>product call</b>, not a code defect. The Reviewer adds <code>status:needs-decision</code> and hands the human a set of options.");
+  addChip(104, ["decision", "needs-decision"]);
+  term("w", "[reviewer] decision-requested: rate-limit source (A: config · B: constant)");
+  feed("bot", `${tr("결정 요청", "requested a decision on")} <b>PR #203</b> ${lbl("status:needs-decision")}`);
+  agent("reviewer", "wait", tr("사람 결정 대기 · PR #203", "waiting for a decision · PR #203"));
+  agent("human", "wait", tr("PR #203 결정 요청", "decision requested on PR #203"));
+  glow(104, "human");
+  await W(1200);
+  await decide({
+    tag: "status:needs-decision", title: "PR #203 — feat(export): rate limit",
+    desc: tr("decision-requested: rate limit 값을 어디에 둘지는 코드가 아니라 운영 정책의 문제입니다.",
+      "decision-requested: where the rate limit lives is an ops-policy question, not a code question."),
+    q: tr("rate limit 값을 어디서 관리할까요?", "Where should the rate limit be configured?"),
+    options: [[tr("A. 설정 파일 (권장)", "A. Config file (suggested)"), tr("export.rateLimit — 재배포 없이 조정", "export.rateLimit — tune without redeploying")],
+      [tr("B. 코드 상수", "B. Code constant"), tr("10 req/min 고정 — 바꾸려면 PR 필요", "fixed at 10 req/min — changing it needs a PR")]],
+    pick: 0,
+  });
+  agent("human", "idle");
+  feed("you", `${tr("코멘트", "commented on")} <b>PR #203</b> <span class="muted">“${tr("A로 가죠. 설정 파일로.", "Go with A — config file.")}”</span>`);
+  dropChip(104, "decision");
+  term("t-reviewer", "[reviewer] trusted answer (write+) → decision-resolved: A");
+  feed("bot", `${tr("코멘트", "commented on")} <b>PR #203</b> <span class="muted">decision-resolved: A</span>`);
+  await W(900);
+  await say("reviewer", "사람의 답은 <b>신뢰된 코멘트</b>(write 권한 이상)만 반영됩니다. 범위 밖 작업은 후속 이슈로 분리합니다.",
+    "Only <b>trusted</b> comments (write access or above) count. Out-of-scope work is split off into a follow-up issue.");
+  agent("reviewer", "work", tr("PR #203 재작업 지시 · 후속 이슈", "PR #203 rework · follow-up"));
+  term("t-reviewer", "[reviewer] followup-created: #107 Document the rate-limit setting");
+  addCard(107, "triage", [["followup", "from PR #203"]]);
+  feed("bot", `${tr("후속 이슈 생성", "created follow-up")} <b>#107</b> ${lbl("status:triage")}`);
+  await W(1000);
+  term("t-coder", "[coder] PR #203 rework: read limit from export.rateLimit");
+  glow(104, "coder");
+  await W(1000);
+  term("t-reviewer", "[reviewer] PR #203: verdict proceed · CLEAN → auto-merge.sh → merged");
+  glow(104, "reviewer");
+  await W(700);
+  addChip(104, ["merged", "merged"]);
+  moveCard(104, "qa");
+  glow(104, null);
+  feed("bot", `${tr("머지", "merged")} <b>PR #203</b> → main ${lbl("status:qa")}`);
+  agent("reviewer", "idle");
+  agent("triager", "work", tr("#107 분류 중", "classifying #107"));
+  glow(107, "triager");
+  await W(700);
+  moveCard(107, "ready");
+  glow(107, null);
+  term("t-triager", "[triager] #107 → agent-ready");
+  agent("triager", "idle");
+  agent("qa", "work", tr("#104 검증 중", "verifying #104"));
+  glow(104, "qa");
+  term("t-qa", "[qa] #104: 11th request in 60s → 429 ✓");
+  await W(1100);
+  addChip(104, ["ok", "QA ✓"]);
+  moveCard(104, "done");
+  glow(104, null);
+  stats.done++;
+  feed("bot", `${tr("이슈 종료", "closed")} <b>#104</b> ${lbl("status:done")}`);
+  agent("qa", "idle");
+  await W(700);
+
+  /* --- 6. QA fail -> rework --- */
+  chapter(5);
+  term("ok", "[coder] tests: 71 passed");
+  term("t-coder", "[coder] gh pr create → PR #204  (Refs #106)");
+  dropChip(106, "lock");
+  addChip(106, ["pr", "PR #204"]);
+  moveCard(106, "review");
+  glow(106, null);
+  stats.prs++;
+  agent("coder", "work", "claim.sh");
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 102");
+  glow(102, "coder");
+  moveCard(102, "progress");
+  addChip(102, ["lock", "🔒 wt-issue-102"]);
+  agent("coder", "work", tr("#102 구현 중", "#102 implementing"));
+  agent("reviewer", "work", tr("PR #204 리뷰 중", "reviewing PR #204"));
+  glow(106, "reviewer");
+  await W(1100);
+  term("t-reviewer", "[reviewer] PR #204: proceed · CLEAN → merged");
+  addChip(106, ["merged", "merged"]);
+  moveCard(106, "qa");
+  glow(106, null);
+  agent("reviewer", "idle");
+  feed("bot", `${tr("머지", "merged")} <b>PR #204</b> → main ${lbl("status:qa")}`);
+  agent("qa", "work", tr("#106 검증 중", "verifying #106"));
+  glow(106, "qa");
+  term("t-qa", "[qa] #106: export orders.csv against fixture…");
+  await W(1300);
+  await say("qa", "테스트는 통과했지만 QA가 실제로 내보낸 CSV에서 헤더가 어긋났습니다. QA는 이슈를 <b>재작업</b>으로 되돌립니다.",
+    "Unit tests passed, but the CSV QA actually exported has a shifted header. QA sends the issue back for <b>rework</b>.");
+  term("e", "[qa] ✗ header mismatch: expected 'currency' at col 5, got col 6");
+  addChip(106, ["fail", "QA ✗ rework"]);
+  dropChip(106, "merged");
+  dropChip(106, "pr");
+  moveCard(106, "ready");
+  glow(106, null);
+  feed("bot", `${tr("코멘트", "commented on")} <b>#106</b> <span class="muted">${tr("QA 실패: 헤더 위치 불일치 — 재현 절차 첨부", "QA failed: header position mismatch — repro attached")}</span> ${lbl("status:agent-ready")}`);
+  agent("qa", "idle");
+  await W(2200);
+
+  term("ok", "[coder] tests: 39 passed");
+  term("t-coder", "[coder] gh pr create → PR #205  (Refs #102)");
+  dropChip(102, "lock");
+  addChip(102, ["pr", "PR #205"]);
+  moveCard(102, "review");
+  glow(102, null);
+  stats.prs++;
+  agent("coder", "work", tr("#106 재작업 · QA 재현 절차 반영", "#106 rework · using QA's repro"));
+  term("t-coder", "[coder] ISSUE=$(claim.sh) → 106  (rework)");
+  glow(106, "coder");
+  moveCard(106, "progress");
+  dropChip(106, "fail");
+  addChip(106, ["lock", "🔒 wt-issue-106"]);
+  agent("reviewer", "work", tr("PR #205 리뷰 중", "reviewing PR #205"));
+  glow(102, "reviewer");
+  await W(1100);
+  term("t-reviewer", "[reviewer] PR #205: proceed · CLEAN → merged");
+  addChip(102, ["merged", "merged"]);
+  moveCard(102, "qa");
+  glow(102, null);
+  agent("reviewer", "idle");
+  agent("qa", "work", tr("#102 검증 중", "verifying #102"));
+  glow(102, "qa");
+  await W(900);
+  term("t-qa", "[qa] #102: page 2 starts at item 21 ✓");
+  addChip(102, ["ok", "QA ✓"]);
+  moveCard(102, "done");
+  glow(102, null);
+  stats.done++;
+  feed("bot", `${tr("이슈 종료", "closed")} <b>#102</b> ${lbl("status:done")}`);
+  agent("qa", "idle");
+  await W(500);
+  term("ok", "[coder] tests: 74 passed (+3 header tests)");
+  term("t-coder", "[coder] gh pr create → PR #206  (Refs #106)");
+  dropChip(106, "lock");
+  addChip(106, ["pr", "PR #206"]);
+  moveCard(106, "review");
+  glow(106, null);
+  stats.prs++;
+  agent("coder", "idle");
+  agent("reviewer", "work", tr("PR #206 리뷰 중", "reviewing PR #206"));
+  glow(106, "reviewer");
+  await W(1000);
+  term("t-reviewer", "[reviewer] PR #206: proceed · CLEAN → merged");
+  addChip(106, ["merged", "merged"]);
+  moveCard(106, "qa");
+  glow(106, null);
+  agent("reviewer", "idle");
+  agent("qa", "work", tr("#106 재검증", "re-verifying #106"));
+  glow(106, "qa");
+  await W(1000);
+  term("t-qa", "[qa] #106: header 'currency' at col 5 ✓");
+  addChip(106, ["ok", "QA ✓"]);
+  moveCard(106, "done");
+  glow(106, null);
+  stats.done++;
+  feed("bot", `${tr("이슈 종료", "closed")} <b>#106</b> ${lbl("status:done")}`);
+  agent("qa", "idle");
+  await W(900);
+
+  /* --- 7. unblock --- */
+  chapter(6);
+  await say("human", "막혀 있던 #103에 사람이 완료 조건을 답하면, 다음 스윕에서 Triager가 이를 감지해 다시 큐에 올립니다.",
+    "Once a human answers #103 with acceptance criteria, the Triager notices on its next sweep and puts it back in the queue.");
+  stats.human++;
+  agent("human", "work", tr("#103에 완료 조건 작성", "writing criteria on #103"));
+  glow(103, "human");
+  await W(1100);
+  feed("you", `${tr("코멘트", "commented on")} <b>#103</b> <span class="muted">“${tr("Google IdP만. 기존 세션은 다음 로그인 때 전환.", "Google IdP only. Migrate sessions at next sign-in.")}”</span>`);
+  agent("human", "idle");
+  await W(900);
+  agent("triager", "work", "unblock-check.sh #103");
+  glow(103, "triager");
+  term("t-triager", "[triager] unblock-check.sh #103 → unblocked (trusted answer)");
+  await W(900);
+  dropChip(103, "fail");
+  moveCard(103, "ready");
+  glow(103, null);
+  feed("bot", `${tr("라벨 변경", "relabeled")} <b>#103</b> ${lbl("status:agent-ready")}`);
+  agent("triager", "idle", tr("스윕 완료", "sweep done"));
+  await say(null, "보드는 계속 흐릅니다. #103과 #107은 다음 스윕에서 Coder가 집어 갑니다.",
+    "The board keeps flowing — #103 and #107 are picked up by the Coder on the next sweep.");
+  term("i", tr("다음 run-all 스윕: 20분 후", "next run-all sweep in 20m"));
+  await W(3200);
+
+  /* --- 8. summary --- */
+  chapter(7);
+  showOutro();
+}
+
+function showOutro() {
+  const s = [
+    [stats.done, tr("이슈 완료", "issues done")],
+    [stats.prs, tr("PR 생성", "PRs opened")],
+    [stats.human, tr("사람이 개입한 순간", "times a human stepped in")],
+    [stats.approvals, tr("에이전트가 approve한 PR", "PRs approved by agents")],
+  ];
+  $("#stats").innerHTML = s.map((x, i) => `<div class="stat${i === 3 ? " key" : ""}"><div class="n">${x[0]}</div><div class="l">${x[1]}</div></div>`).join("");
+  $("#outro").classList.add("show");
+  setPlaying(false);
+  document.body.dataset.done = "1";
+}
+
+/* ---------------- controls ---------------- */
+function setPlaying(p) { paused = !p; $("#playBtn").textContent = p ? "❚❚ Pause" : "▶ Play"; }
+function reset() {
+  runId++;
+  cards = {}; agentState = {}; stats = { done: 0, prs: 0, human: 0, approvals: 0 };
+  scenarioClock = 0; lastCaption = -Infinity;
+  $("#term").innerHTML = ""; $("#feed").innerHTML = "";
+  $("#scrim").classList.remove("show"); $("#outro").classList.remove("show");
+  hideCursor();
+  delete document.body.dataset.done;
+  buildBoard(); renderAgents(); chapter(0);
+  caption(null, tr("▶ Play를 누르면 시뮬레이션이 시작됩니다.", "Press ▶ Play to start the simulation."), tr("▶ Play를 누르면 시뮬레이션이 시작됩니다.", "Press ▶ Play to start the simulation."));
+  updateCounts();
+}
+function start() {
+  reset();
+  $("#intro").classList.remove("show");
+  setPlaying(true);
+  scenario().catch(e => { if (!(e instanceof Abort)) console.error(e); });
+}
+let started = false;
+$("#playBtn").onclick = () => {
+  if (!started || document.body.dataset.done) { started = true; start(); return; }
+  setPlaying(paused);
+};
+$("#restartBtn").onclick = () => { started = true; start(); };
+$("#startBtn").onclick = () => { started = true; start(); };
+$("#againBtn").onclick = () => { started = true; start(); };
+const SPEEDS = [1, 1.5, 2, 4];
+function showSpeed() { $("#speedBtn").textContent = speed + "×"; }
+$("#speedBtn").onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] || 1; showSpeed(); };
+$("#langBtn").onclick = () => {
+  lang = lang === "en" ? "ko" : "en";
+  applyLang(); refreshColSubs();
+  for (const id in cards) renderCard(id);
+  if (chapterIdx != null) chapter(chapterIdx);
+};
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && e.target === document.body) { e.preventDefault(); $("#playBtn").click(); }
+});
+
+/* ---------------- boot ---------------- */
+showSpeed();
+reset();
+applyLang();
+if (AUTOPLAY) {
+  started = true;
+  $("#intro").classList.add("show");
+  $("#startBtn").style.visibility = "hidden";
+  setTimeout(start, 4200 / speed);
+} else {
+  $("#intro").classList.add("show");
+}
+</script>
+</body>
+</html>
